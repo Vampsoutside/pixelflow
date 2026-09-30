@@ -262,8 +262,42 @@ input:focus-visible, textarea:focus-visible,
   background: rgba(255,107,157,.08);
   border: 1px solid rgba(255,107,157,.25); border-radius: 8px;
 }
+/* Escape hatch shown under a failed sign-in. */
+.auth-recover {
+  display: block; text-align: center; font-size: 11px;
+  color: var(--accent); cursor: pointer; font-weight: 600; margin-top: -4px;
+}
+/* Both options are always visible: guessing which one is active was the
+   reason a new visitor hit "Wrong username or password." with no way out. */
+.auth-tabs {
+  display: flex; gap: 4px; padding: 4px; margin-bottom: 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+}
+.auth-tab {
+  flex: 1; padding: 9px; border: none; cursor: pointer;
+  background: transparent; color: var(--muted);
+  font-size: 12px; font-weight: 600; border-radius: 9px;
+  transition: background .2s, color .2s;
+}
+.auth-tab:hover { color: var(--text); }
+.auth-tab.active { background: var(--accent); color: #fff; }
+
 .auth-switch { font-size: 12px; color: var(--muted); margin-top: 16px; }
 .auth-switch a { color: var(--accent); cursor: pointer; font-weight: 600; }
+
+/* Guest entry — secondary, so it never competes with the real buttons. */
+.auth-guest {
+  margin-top: 14px; background: transparent; color: var(--text);
+  border: 1px solid var(--border); box-shadow: none; font-weight: 600;
+}
+.auth-guest:hover {
+  border-color: var(--muted); background: var(--surface); opacity: 1;
+}
+.auth-guest:disabled { opacity: .5; }
+.auth-guest-note {
+  font-size: 10px; line-height: 1.6; color: var(--muted2);
+  margin-top: 10px; text-align: center;
+}
 
 /* Provider sign-in, shown only when the server reports one as configured. */
 .auth-providers { margin-top: 18px; }

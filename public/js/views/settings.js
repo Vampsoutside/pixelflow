@@ -1,6 +1,6 @@
 import { el, toast } from '../ui.js';
 import { api } from '../api.js';
-import { store, settings, updateSetting } from '../store.js';
+import { store, settings, updateSetting, setUser } from '../store.js';
 import { timer, skipToBreak, applyFocusLength } from '../timer.js';
 import { spotifyConfig, spotifyStatus } from '../media/spotify.js';
 
@@ -138,6 +138,9 @@ async function render() {
         ]),
         el('div', { class: 'setting-val', text: String(store.user?.xp || 0) }),
       ]),
+      // A guest has no password, so this is the one chance to set one. Without
+      // it the session still works, but nothing can be signed back into.
+      store.user?.isGuest ? claimForm() : null,
       el('button', {
         class: 'btn danger block', text: 'Sign out', style: { marginTop: '14px' },
         onclick: async () => {
@@ -152,6 +155,49 @@ async function render() {
   );
 
   if (panel) settingsSidePanel(panel);
+}
+
+/**
+ * Lets a guest give their account a username, email and password, keeping
+ * everything they have already logged.
+ */
+function claimForm() {
+  const fields = {};
+  const input = (key, attrs) => {
+    fields[key] = el('input', { class: 'inp', ...attrs });
+    return fields[key];
+  };
+  const status = el('div', { class: 'auth-error', hidden: true });
+  const submit = el('button', { class: 'btn primary block', text: 'Save my account' });
+
+  submit.addEventListener('click', async () => {
+    status.hidden = true;
+    submit.disabled = true;
+    try {
+      const { user } = await api.post('/api/auth/claim', {
+        username: fields.username.value.trim(),
+        email: fields.email.value.trim(),
+        password: fields.password.value,
+      });
+      setUser(user);
+      toast('Account saved — you can sign in now.');
+      await render();
+    } catch (err) {
+      status.textContent = err.message || 'Could not save your account.';
+      status.hidden = false;
+      submit.disabled = false;
+    }
+  });
+
+  return el('div', { class: 'sp-note', style: { marginTop: '12px', display: 'grid', gap: '8px' } }, [
+    el('b', { text: 'You are using PixelFlow as a guest.' }),
+    el('span', { text: 'Set a username and password to keep this progress and sign back in later.' }),
+    input('username', { type: 'text', placeholder: 'Username', autocomplete: 'username' }),
+    input('email', { type: 'email', placeholder: 'Email', autocomplete: 'email' }),
+    input('password', { type: 'password', placeholder: 'Password (min 8 chars)', autocomplete: 'new-password' }),
+    status,
+    submit,
+  ]);
 }
 
 function stepper(label, value, min, max, increment, unit, key, hint) {

@@ -222,4 +222,17 @@ export function dateRange(from, to) {
 /** Applies the schema. Safe to run on every boot. */
 export async function migrate() {
   await db.exec(SCHEMA);
+
+  // CREATE TABLE IF NOT EXISTS cannot add a column to a table that already
+  // exists, so anything introduced after a database was first created has to
+  // be added explicitly. SQLite has no "ADD COLUMN IF NOT EXISTS", hence the
+  // pragma check.
+  const columns = async (table) => new Set(
+    (await db.prepare(`PRAGMA table_info(${table})`).all()).map((c) => c.name),
+  );
+
+  const userColumns = await columns('users');
+  if (!userColumns.has('is_guest')) {
+    await db.exec('ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0');
+  }
 }

@@ -10,6 +10,10 @@ CREATE TABLE IF NOT EXISTS users (
   username      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
   email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
   password_hash TEXT    NOT NULL,
+  -- A guest skipped the sign-up form and has a random password nobody knows,
+  -- so this row is what marks the account as worth keeping. Claiming it sets a
+  -- real username, email and password.
+  is_guest      INTEGER NOT NULL DEFAULT 0,
   avatar_json   TEXT    NOT NULL DEFAULT '{}',
   settings_json TEXT    NOT NULL DEFAULT '{}',
   xp            INTEGER NOT NULL DEFAULT 0,

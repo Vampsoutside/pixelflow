@@ -53,6 +53,9 @@ export async function getUser(id) {
     id: row.id,
     username: row.username,
     email: row.email,
+    // True while the account is a throwaway guest session that has never been
+    // given a password. The client uses this to prompt for one.
+    isGuest: Boolean(row.is_guest),
     xp: row.xp,
     level: row.level,
     createdAt: row.created_at,

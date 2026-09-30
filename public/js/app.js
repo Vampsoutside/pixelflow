@@ -138,27 +138,79 @@ async function reportAuthResult() {
   window.history.replaceState({}, '', clean);
 }
 
+/** Paints the form for the current mode. */
+function applyMode() {
+  const signup = authMode === 'signup';
+  const emailField = $('#a-email');
+  $('#auth-submit').textContent = signup ? 'Create account' : 'Sign In';
+  $('#auth-toggle').textContent = signup ? 'Sign in instead' : 'Create an account';
+  $('#auth-mode-hint').textContent = signup ? 'Already have one?' : 'New here?';
+  $('#auth-tab-login').classList.toggle('active', !signup);
+  $('#auth-tab-signup').classList.toggle('active', signup);
+  $('#auth-tab-login').setAttribute('aria-selected', String(!signup));
+  $('#auth-tab-signup').setAttribute('aria-selected', String(signup));
+  // Email is only collected when creating an account.
+  emailField.required = signup;
+  emailField.toggleAttribute('hidden', !signup);
+  // The hint line is now redundant — the tabs above say the same thing.
+  $('#auth-switch').hidden = true;
+}
+
+function setMode(mode) {
+  authMode = mode;
+  $('#auth-error').hidden = true;
+  applyMode();
+}
+
+/**
+ * Adds a "no account? create one" escape hatch under a failed sign-in,
+ * carrying the username across so it is not retyped.
+ */
+function offerSignup() {
+  if ($('#auth-recover')) return;
+  const link = document.createElement('a');
+  link.id = 'auth-recover';
+  link.className = 'auth-recover';
+  link.textContent = 'No account yet? Create one';
+  link.addEventListener('click', () => {
+    const username = $('#a-user').value.trim();
+    setMode('signup');
+    if (username) $('#a-user').value = username;
+    $('#a-pass').value = '';
+    $('#a-email').focus();
+  });
+  $('#auth-error').after(link);
+}
+
 function wireAuth() {
   const form = $('#auth-form');
-  const emailField = $('#a-email');
   const error = $('#auth-error');
   const submit = $('#auth-submit');
-
-  const applyMode = () => {
-    const signup = authMode === 'signup';
-    $('#auth-toggle').textContent = signup ? 'Sign in instead' : 'Create an account';
-    $('#auth-mode-hint').textContent = signup ? 'Already have one?' : 'New here?';
-    submit.textContent = signup ? 'Create account' : 'Sign In';
-    // Email is only collected when creating an account.
-    emailField.required = signup;
-    emailField.toggleAttribute('hidden', !signup);
-  };
   applyMode();
 
-  $('#auth-toggle').addEventListener('click', () => {
-    authMode = authMode === 'login' ? 'signup' : 'login';
+  // Both tabs are always visible, so nobody has to guess which mode they are
+  // in or discover that they needed to switch.
+  $('#auth-tab-login').addEventListener('click', () => setMode('login'));
+  $('#auth-tab-signup').addEventListener('click', () => setMode('signup'));
+  $('#auth-toggle').addEventListener('click', () =>
+    setMode(authMode === 'login' ? 'signup' : 'login'));
+
+  $('#auth-guest').addEventListener('click', async () => {
     error.hidden = true;
-    applyMode();
+    const btn = $('#auth-guest');
+    btn.disabled = true;
+    btn.textContent = 'Starting…';
+    try {
+      const { user } = await api.post('/api/auth/guest', {});
+      setUser(user);
+      toast('You are browsing as a guest.');
+      await enterApp();
+    } catch (err) {
+      error.textContent = err.message || 'Could not start a guest session.';
+      error.hidden = false;
+      btn.disabled = false;
+      btn.textContent = 'Continue as guest';
+    }
   });
 
   form.addEventListener('submit', async (event) => {
@@ -180,9 +232,11 @@ function wireAuth() {
       error.hidden = false;
       submit.disabled = false;
       applyMode();
+      // A failed sign-in is exactly when someone who has no account yet gets
+      // stuck, so offer the way out rather than making them find it.
+      if (authMode === 'login') offerSignup();
       return;
     }
-
     // Rendering failures after a successful sign-in are a different problem
     // from bad credentials, so they get their own message.
     try {

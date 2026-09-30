@@ -165,9 +165,18 @@ SoundCloud box — which is the intended behaviour, not a break.
 
 ## 4. After deploying
 
-Open the site and click **Create an account** to register the first user. No
-demo accounts are created, and there are no preset credentials shipped with the
-app.
+Open the site. There are three ways in, and no configuration is needed for any
+of them:
+
+- **Continue as guest** — no form at all. The account is real and its progress
+  saves, but nobody knows its password, so **Settings → ACCOUNT** is where a
+  guest sets one. Until that is done the work is only reachable from that
+  browser.
+- **Create account** — a username, email and password.
+- **Google / Microsoft** — if you have configured them above.
+
+No demo accounts are created, and there are no preset credentials shipped with
+the app.
 
 Note that sign-up is open to anyone with the URL. If you would rather it not
 be, delete the deploy or put the project behind Vercel Authentication under

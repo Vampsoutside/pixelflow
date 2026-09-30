@@ -81,9 +81,88 @@ router.post('/login', async (req, res) => {
   return res.json({ user: await getUser(row.id), csrfToken: csrfToken() });
 });
 
-router.post('/logout', async (req, res) => {
+router.post('/logout', async (_req, res) => {
   clearSessionCookie(res);
   res.json({ ok: true });
+});
+
+/**
+ * Signs you straight in, with no form and no credentials.
+ *
+ * The guest is a real row in `users`, not a separate anonymous path: every
+ * feature already depends on a user id — friends, logs, plans — so this is
+ * what makes the whole app work without a login. Its password is random and
+ * discarded, so nobody can sign into it later, and `is_guest` marks the
+ * account as claimable before its data is thrown away.
+ */
+router.post('/guest', async (_req, res) => {
+  // Retry on the astronomically unlikely id collision rather than failing.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const tag = randomBytes(5).toString('base64url');
+    const username = `guest_${tag}`;
+    const email = `${username}@guest.pixelflow.local`;
+
+    const clash = await db.prepare('SELECT 1 AS x FROM users WHERE username = ? OR email = ?')
+      .get(username, email);
+    if (clash) continue;
+
+    const info = await db.prepare(
+      'INSERT INTO users (username, email, password_hash, is_guest) VALUES (?,?,?,1)',
+    ).run(username, email, hashPassword(randomBytes(32).toString('hex')));
+    const id = Number(info.lastInsertRowid);
+
+    // Same starter plan and tags as a real sign-up, so the tracker is not an
+    // empty screen the moment someone arrives.
+    await tx(async (t) => {
+      const plan = t.prepare(
+        'INSERT INTO study_plans (user_id, weekday, planned_minutes, active) VALUES (?,?,?,1)',
+      );
+      for (const weekday of [1, 2, 3, 4, 5]) {
+        await plan.run(id, weekday, DEFAULT_SETTINGS.focusMins * 60);
+      }
+      const tag = t.prepare('INSERT INTO tags (user_id, name, color) VALUES (?,?,?)');
+      await tag.run(id, 'Study', '#7c6fff');
+      await tag.run(id, 'Work', '#6bffda');
+    });
+
+    await log(id, 'account', 'Started as a guest');
+    setSessionCookie(res, id);
+    return res.json({ user: await getUser(id), csrfToken: csrfToken() });
+  }
+
+  return res.status(500).json({ error: 'Could not start a guest session.' });
+});
+
+/**
+ * Turns the guest session into a real account, keeping every row it owns.
+ * Setting a password this way is the only way a guest's data can be kept.
+ */
+router.post('/claim', requireAuth, async (req, res) => {
+  const user = await getUser(req.user.id);
+  if (!user) return res.status(404).json({ error: 'No such user' });
+  if (!user.isGuest) return res.status(409).json({ error: 'This account is already claimed.' });
+
+  const { username, email, password } = req.body || {};
+  const problem = validateCredentials({ username, email, password });
+  if (problem) return res.status(400).json({ error: problem });
+
+  const clash = await db.prepare(
+    'SELECT username, email FROM users WHERE (username = ? OR email = ?) AND id <> ?',
+  ).get(username, email, user.id);
+  if (clash) {
+    return res.status(409).json({
+      error: clash.username.toLowerCase() === String(username).toLowerCase()
+        ? 'That username is taken.'
+        : 'That email is already registered.',
+    });
+  }
+
+  await db.prepare(
+    'UPDATE users SET username = ?, email = ?, password_hash = ?, is_guest = 0 WHERE id = ?',
+  ).run(username, email, hashPassword(password), user.id);
+
+  await log(user.id, 'account', `Created your account, ${username}`);
+  return res.json({ user: await getUser(user.id), csrfToken: csrfToken() });
 });
 
 router.get('/session', async (req, res) => {

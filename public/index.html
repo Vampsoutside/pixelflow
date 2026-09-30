@@ -27,6 +27,11 @@
     <div class="auth-logo-big">PIXEL<br>FLOW</div>
     <div class="auth-tagline">your pixel-art study companion</div>
 
+    <div class="auth-tabs" role="tablist">
+      <button class="auth-tab" type="button" id="auth-tab-login" role="tab">Sign in</button>
+      <button class="auth-tab" type="button" id="auth-tab-signup" role="tab">Create account</button>
+    </div>
+
     <form id="auth-form" autocomplete="on">
       <input class="auth-inp" id="a-user" autocomplete="username" placeholder="Username" required>
       <input class="auth-inp" id="a-email" type="email" autocomplete="email" placeholder="Email" required>
@@ -40,9 +45,15 @@
       <div class="auth-provider-list" id="auth-provider-list"></div>
     </div>
 
-    <div class="auth-switch">
-      <span id="auth-mode-hint">New here?</span>
-      <a id="auth-toggle">Create an account</a>
+    <button class="auth-btn auth-guest" type="button" id="auth-guest">Continue as guest</button>
+    <p class="auth-guest-note" id="auth-guest-note">
+      Try everything out. Your progress saves automatically — add a password
+      later to keep it.
+    </p>
+
+    <div class="auth-switch" id="auth-switch" hidden>
+      <span id="auth-mode-hint">Already have one?</span>
+      <a id="auth-toggle">Sign in instead</a>
     </div>
   </div>
 </div>
