@@ -1,4 +1,4 @@
-import { db, nowIso } from './db.js';
+import { db, tx, nowIso } from './db.js';
 
 /**
  * Shared queries and small business helpers used across the route modules.
@@ -92,6 +92,35 @@ export async function addXp(userId, amount) {
 export async function log(userId, kind, message, payload = {}) {
   await db.prepare('INSERT INTO logs (user_id, kind, message, payload, created_at) VALUES (?,?,?,?,?)')
     .run(userId, kind, message, JSON.stringify(payload), nowIso());
+}
+
+// ── OAuth state ──────────────────────────────────────────────────────────
+
+/**
+ * Atomically consumes a sign-in state row, returning it or undefined.
+ *
+ * The read has to happen before the delete: a DELETE returns no rows, so
+ * trying to read the row out of the DELETE always yields undefined and every
+ * callback looks like a forgery. Doing both in one transaction is what stops
+ * two callbacks carrying the same state from both being accepted.
+ */
+export async function consumeLoginState(state, provider) {
+  return tx(async (t) => {
+    const row = await t.prepare(
+      'SELECT * FROM oauth_login_states WHERE state = ? AND provider = ?',
+    ).get(state, provider);
+    if (row) await t.prepare('DELETE FROM oauth_login_states WHERE state = ?').run(state);
+    return row;
+  });
+}
+
+/** The same single-use consumption for the "connect a provider" flow. */
+export async function consumeLinkState(state) {
+  return tx(async (t) => {
+    const row = await t.prepare('SELECT * FROM oauth_states WHERE state = ?').get(state);
+    if (row) await t.prepare('DELETE FROM oauth_states WHERE state = ?').run(state);
+    return row;
+  });
 }
 
 // ── study data ───────────────────────────────────────────────────────────

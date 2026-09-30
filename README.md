@@ -15,7 +15,8 @@ Logs, Settings.**
 | Server | Express 4 |
 | Database | SQLite via `@libsql/client` — a local file, or Turso when `TURSO_DATABASE_URL` is set |
 | Front end | Vanilla ES modules, no bundler |
-| Tests | `node:test` (18 unit tests) + a Playwright browser suite (84 checks) |
+| Sign-in | Local username/password, plus optional Google and Microsoft OAuth |
+| Tests | `node:test` (40 tests) + a Playwright browser suite (84 checks) |
 
 ## Run it locally
 

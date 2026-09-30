@@ -38,10 +38,15 @@ async function boot() {
   wireSidebar();
   wireAvatarChrome();
 
+  // Read before the session check: a successful provider callback signs the
+  // person in, so the interesting case is the one where a user *is* found.
+  await reportAuthResult();
+
   const { user } = await api.get('/api/auth/session').catch(() => ({ user: null }));
   if (!user) {
     $('#auth-overlay').hidden = false;
     wireAuth();
+    loadProviders();
     return;
   }
   setUser(user);
@@ -65,6 +70,73 @@ async function enterApp() {
 // ── auth overlay ──────────────────────────────────────────────────────────
 
 let authMode = 'login';
+
+// Official marks, inlined so the sign-in screen needs no network request.
+const PROVIDER_ICONS = {
+  google: '<svg viewBox="0 0 18 18" aria-hidden="true"><path d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/><path d="M9 3.58c1.32 0 2.5.46 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>',
+  microsoft: '<svg viewBox="0 0 18 18" aria-hidden="true"><path class="ms-yellow" d="M0 0h8.5v8.5H0z"/><path class="ms-teal" d="M9.5 0H18v8.5H9.5z"/><path d="M0 9.5h8.5V18H0z"/><path class="ms-blue" d="M9.5 9.5H18V18H9.5z"/></svg>',
+};
+
+/**
+ * Shows a provider button per provider the server actually has credentials
+ * for, so an unconfigured provider never appears to work and then fail.
+ */
+async function loadProviders() {
+  const wrap = $('#auth-providers');
+  const list = $('#auth-provider-list');
+  if (!wrap || !list) return;
+
+  let providers = [];
+  try {
+    ({ providers = [] } = await api.get('/api/auth/providers'));
+  } catch {
+    return; // offline or older server: keep the password form only
+  }
+
+  list.innerHTML = '';
+  for (const { name, label } of providers) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'auth-provider-btn';
+    btn.dataset.provider = name;
+    btn.innerHTML = `${PROVIDER_ICONS[name] || ''}<span>Continue with ${label}</span>`;
+    // A top-level navigation, so the provider owns the whole page and our
+    // CSRF cookie is irrelevant — this is why it is a link, not a fetch.
+    btn.addEventListener('click', () => {
+      window.location.assign(`/api/auth/${name}/login`);
+    });
+    list.appendChild(btn);
+  }
+  wrap.hidden = providers.length === 0;
+}
+
+/** Reads ?auth=… left by the provider callback and reports the outcome. */
+async function reportAuthResult() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('auth');
+  if (!code) return;
+
+  const provider = params.get('provider');
+  const names = { google: 'Google', microsoft: 'Microsoft' };
+  const messages = {
+    welcome: `Welcome! Your ${names[provider] || 'provider'} account is ready.`,
+    ok: 'Signed in.',
+    linked: `${names[provider] || 'Provider'} account connected.`,
+    'already-linked': 'That account is already connected.',
+    denied: 'Sign-in cancelled.',
+    'bad-state': 'That sign-in attempt expired. Please try again.',
+    unconfigured: 'That sign-in method is not configured on this server.',
+    'unknown-provider': 'Unknown sign-in method.',
+    failed: 'Sign-in failed. Please try again.',
+  };
+  if (messages[code]) toast(messages[code], 4200);
+
+  // Leave the marker behind so a reload does not replay the message.
+  const clean = new URL(window.location.href);
+  clean.searchParams.delete('auth');
+  clean.searchParams.delete('provider');
+  window.history.replaceState({}, '', clean);
+}
 
 function wireAuth() {
   const form = $('#auth-form');

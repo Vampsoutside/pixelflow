@@ -127,6 +127,36 @@ Only needed if you want the Spotify player. Add them under
 | `SPOTIFY_CLIENT_SECRET` | Spotify app client secret |
 | `TURSO_DATABASE_URL` | hosted database URL — set this on Vercel so data persists |
 | `TURSO_AUTH_TOKEN` | token for that database |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional Google sign-in |
+| `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` | optional Microsoft sign-in |
+| `PUBLIC_ORIGIN` | the deployed origin, used to build the OAuth redirect URIs |
+
+## Signing in with Google or Microsoft
+
+Optional and independent — set one pair and the other stays hidden.
+
+1. **Google** — [console.cloud.google.com](https://console.cloud.google.com) →
+   *APIs & Services* → *Credentials* → *Create credentials* → *OAuth client ID* →
+   *Web application*. Add **Authorised redirect URIs**:
+   `https://your-app.vercel.app/api/auth/google/callback`
+2. **Microsoft** — [entra.microsoft.com](https://entra.microsoft.com) → *App
+   registrations* → *New registration*. Choose *Accounts in any organizational
+   directory and personal Microsoft accounts*. Add a *Web* redirect URI:
+   `https://your-app.vercel.app/api/auth/microsoft/callback`
+
+Copy the client id and secret into the four variables above, then redeploy.
+
+`PUBLIC_ORIGIN` must match the deployed host, because the redirect URI is built
+from it — Google and Microsoft compare it byte for byte against the console
+entry and reject anything else.
+
+**How accounts are matched.** Identity is the provider's `sub` claim, never the
+email address. The first sign-in with an address that already belongs to a
+local account links to it; if that account is already linked to a provider, a
+new account is created instead, so claiming someone else's address cannot take
+an existing account over. A provider-only account gets an unguessable random
+password, so it can never be signed into through the password form — you can
+still add a password later by signing in and linking from Settings.
 
 The Spotify **redirect URI** in your Spotify developer dashboard must match your
 Vercel domain exactly, e.g. `https://your-app.vercel.app/api/spotify/callback`.

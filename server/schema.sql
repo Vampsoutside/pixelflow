@@ -121,3 +121,36 @@ CREATE TABLE IF NOT EXISTS oauth_states (
   user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at INTEGER NOT NULL
 );
+
+-- ── Sign in with Google / Microsoft ──────────────────────────────────────
+--
+-- A provider account is linked to a PixelFlow user here. `subject` is the
+-- provider's own immutable user id ("sub" claim), never their email: emails
+-- change and are not unique across tenants.
+--
+-- Keeping this separate from users means one person can sign in with a local
+-- password *and* a provider, and can add a second provider later, without the
+-- users table growing a column per provider.
+CREATE TABLE IF NOT EXISTS oauth_identities (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider   TEXT    NOT NULL,
+  subject    TEXT    NOT NULL,
+  email      TEXT,
+  created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  -- One provider identity maps to exactly one account, which is what stops a
+  -- replayed callback from re-linking somebody else's account.
+  UNIQUE (provider, subject)
+);
+CREATE INDEX IF NOT EXISTS idx_oauth_identities_user ON oauth_identities(user_id);
+
+-- State for the sign-in round trip. Unlike oauth_states there is no user yet,
+-- so this is deliberately a separate table with no foreign key.
+CREATE TABLE IF NOT EXISTS oauth_login_states (
+  state      TEXT PRIMARY KEY,
+  provider   TEXT NOT NULL,
+  -- Set when someone already had a session and is deliberately adding a
+  -- provider to that account instead of creating a new one.
+  link_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL
+);

@@ -265,6 +265,36 @@ input:focus-visible, textarea:focus-visible,
 .auth-switch { font-size: 12px; color: var(--muted); margin-top: 16px; }
 .auth-switch a { color: var(--accent); cursor: pointer; font-weight: 600; }
 
+/* Provider sign-in, shown only when the server reports one as configured. */
+.auth-providers { margin-top: 18px; }
+.auth-or {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 10px; color: var(--muted2); text-transform: uppercase;
+  letter-spacing: 1.5px; margin-bottom: 14px;
+}
+.auth-or::before, .auth-or::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+.auth-provider-list { display: flex; flex-direction: column; gap: 9px; }
+.auth-provider-btn {
+  width: 100%; padding: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 11px; color: var(--text);
+  font-size: 13px; font-weight: 600;
+  transition: border-color .2s, background .2s, transform .2s;
+}
+.auth-provider-btn:hover {
+  border-color: var(--accent); background: var(--surface2); transform: translateY(-1px);
+}
+.auth-provider-btn svg { width: 16px; height: 16px; flex: none; }
+.auth-provider-btn[data-provider="google"] svg path,
+.auth-provider-btn[data-provider="google"] svg rect { fill: var(--text); }
+.auth-provider-btn[data-provider="microsoft"] svg path { fill: #f25022; }
+.auth-provider-btn[data-provider="microsoft"] svg .ms-blue { fill: #7fba00; }
+.auth-provider-btn[data-provider="microsoft"] svg .ms-teal { fill: #00a4ef; }
+.auth-provider-btn[data-provider="microsoft"] svg .ms-yellow { fill: #ffb900; }
+
 /* ── TOAST ───────────────────────────────────────────────────────────── */
 
 #toast {

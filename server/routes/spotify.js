@@ -1,7 +1,7 @@
 import { asyncRouter } from '../http.js';
 import { db } from '../db.js';
 import { requireAuth, newState, verifyState } from '../auth.js';
-import { log } from '../store.js';
+import { log, consumeLinkState } from '../store.js';
 
 const router = asyncRouter();
 
@@ -74,8 +74,10 @@ router.get('/callback', async (req, res) => {
 
   if (error) return res.redirect(`/?spotify=denied`);
 
-  // Single-use state, expired after 10 minutes.
-  const row = await db.prepare('DELETE FROM oauth_states WHERE state = ?').get(String(state || ''));
+  // Single-use state, expired after 10 minutes. It has to be read before it is
+  // removed — a DELETE returns no rows, so reading it out of the DELETE would
+  // always look like a forgery and reject every callback.
+  const row = await consumeLinkState(String(state || ''));
   if (!row || !verifyState(state) || Date.now() - row.created_at > 10 * 60 * 1000) {
     return res.redirect('/?spotify=bad-state');
   }
