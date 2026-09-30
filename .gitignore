@@ -1,0 +1,11 @@
+node_modules/
+.vercel/
+.env
+.env.local
+.DS_Store
+*.log
+
+# Local database — recreated and auto-seeded on first boot.
+data/*.db
+data/*.db-shm
+data/*.db-wal

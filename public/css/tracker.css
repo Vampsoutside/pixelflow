@@ -1,0 +1,189 @@
+/* ── Analytics / study tracker ───────────────────────────────────────── */
+
+/* TODAY CARD */
+.today-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 18px; align-items: center;
+}
+@media (max-width: 760px) { .today-grid { grid-template-columns: 1fr; } }
+
+.field-label {
+  font-size: 9px; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+}
+.date-input {
+  width: 100%; padding: 8px 11px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text);
+  font-family: var(--numeric); font-size: 20px; outline: none;
+  transition: border-color .2s;
+}
+.date-input:focus { border-color: var(--accent); }
+.date-input::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+
+.minutes-stepper { display: flex; align-items: center; gap: 8px; }
+.minutes-stepper .stepper-val { min-width: 92px; font-size: 26px; }
+.minutes-stepper .stepper button { width: 34px; height: 32px; font-size: 18px; }
+
+.preset-mins { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
+
+/* Progress read-out */
+.progress-readout { margin-top: 14px; }
+.progress-nums {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; margin-bottom: 7px;
+}
+.progress-studied {
+  font-family: var(--numeric); font-size: 34px; line-height: 1;
+  color: var(--text);
+}
+.progress-studied.met { color: var(--good); text-shadow: 0 0 16px rgba(107,255,218,.4); }
+.progress-planned { font-size: 11px; color: var(--muted); text-align: right; }
+.progress-pct { font-family: var(--pixel); font-size: 9px; color: var(--accent); }
+.progress-pct.met { color: var(--good); }
+
+/* ── WEEKLY PLAN GRID ────────────────────────────────────────────────── */
+
+.plan-grid { display: flex; flex-direction: column; gap: 4px; }
+.plan-row {
+  display: grid;
+  grid-template-columns: 78px 1fr 96px 62px;
+  align-items: center; gap: 10px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: var(--surface);
+  transition: all .18s;
+}
+.plan-row:hover { border-color: var(--border); background: var(--surface2); }
+.plan-row.active { background: rgba(124,111,255,.07); }
+.plan-row.today { border-color: rgba(124,111,255,.45); box-shadow: inset 2px 0 0 var(--accent); }
+.plan-row.rest { opacity: .5; }
+
+.plan-day { display: flex; align-items: center; gap: 8px; }
+.plan-day-name { font-size: 12px; font-weight: 600; }
+.plan-tick {
+  width: 18px; height: 18px; flex-shrink: 0;
+  border-radius: 5px; border: 2px solid var(--border2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: #fff; transition: all .2s; cursor: pointer;
+}
+.plan-tick:hover { border-color: var(--accent); }
+.plan-row.active .plan-tick { background: var(--accent); border-color: var(--accent); }
+
+.plan-mini-bar { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+.plan-mini-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent3));
+  transition: width .5s ease;
+}
+.plan-mini-fill.met { background: var(--good); }
+.plan-mini-fill.over { background: var(--accent2); }
+.plan-hrs { display: flex; justify-content: flex-end; }
+.plan-row .stepper .stepper-val { min-width: 40px; font-size: 17px; }
+.plan-row .stepper button { width: 20px; height: 20px; font-size: 13px; }
+.plan-row.rest .stepper { opacity: .3; pointer-events: none; }
+.plan-actual { font-size: 10px; color: var(--muted); text-align: right; white-space: nowrap; }
+.plan-actual.met { color: var(--good); }
+
+@media (max-width: 700px) {
+  .plan-row { grid-template-columns: 70px 1fr 88px; }
+  .plan-actual { display: none; }
+}
+
+/* Weekly total header strip */
+.week-total {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 14px; margin-bottom: 12px;
+  border-radius: 12px;
+  background: rgba(124,111,255,.07);
+  border: 1px solid rgba(124,111,255,.2);
+}
+.week-total-num {
+  font-family: var(--numeric); font-size: 30px; line-height: 1; color: var(--text);
+}
+.week-total-text { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.week-total-text b { color: var(--text); }
+
+/* ── WEEK-OF-MONTH ROWS ──────────────────────────────────────────────── */
+
+.wom-list { display: flex; flex-direction: column; gap: 6px; }
+.wom-row {
+  display: grid; grid-template-columns: 52px 1fr 128px;
+  align-items: center; gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+  transition: all .18s;
+}
+.wom-row:hover { border-color: rgba(124,111,255,.3); }
+.wom-row.current { border-color: rgba(124,111,255,.45); background: rgba(124,111,255,.06); }
+.wom-label {
+  font-family: var(--pixel); font-size: 8px; color: var(--accent);
+  letter-spacing: .5px;
+}
+.wom-range { font-size: 9px; color: var(--muted2); margin-top: 3px; font-family: var(--numeric); }
+.wom-nums { font-size: 11px; color: var(--muted); text-align: right; white-space: nowrap; }
+.wom-nums b { color: var(--text); }
+
+/* ── CHART ───────────────────────────────────────────────────────────── */
+
+.chart-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.chart-toggle { display: flex; gap: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 3px; }
+.chart-toggle button {
+  padding: 5px 14px; border-radius: 6px; background: transparent;
+  color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .6px;
+  cursor: pointer; transition: all .2s;
+}
+.chart-toggle button.active { background: var(--accent); color: #fff; }
+
+.chart-legend { display: flex; gap: 14px; font-size: 10px; color: var(--muted); flex-wrap: wrap; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend-swatch { width: 9px; height: 9px; border-radius: 2px; }
+
+.chart-svg { width: 100%; display: block; overflow: visible; }
+.chart-svg .grid-line { stroke: rgba(255,255,255,.06); stroke-width: 1; }
+.chart-svg .axis-text {
+  fill: var(--muted); font-size: 9px; font-family: var(--numeric);
+}
+.chart-bar { transition: opacity .15s, y .4s cubic-bezier(.22,1,.36,1), height .4s cubic-bezier(.22,1,.36,1); }
+.chart-bar:hover { opacity: .8; }
+.chart-plan-line { fill: none; stroke: var(--accent4); stroke-width: 1.5; stroke-dasharray: 3 3; opacity: .75; }
+.chart-col:hover .chart-col-bg { fill: rgba(255,255,255,.04); }
+
+.chart-tip {
+  position: fixed; z-index: 80; pointer-events: none;
+  padding: 7px 11px; border-radius: 8px;
+  background: rgba(12,12,28,.97); border: 1px solid var(--border2);
+  font-size: 11px; white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0,0,0,.5);
+  transform: translate(-50%, -130%);
+  opacity: 0; transition: opacity .12s;
+}
+.chart-tip.show { opacity: 1; }
+.chart-tip b { color: var(--text); }
+.chart-tip .tip-dim { color: var(--muted); }
+
+/* Skeleton bars so the pane never renders blank while loading. */
+.chart-skeleton { display: flex; align-items: flex-end; gap: 3px; height: 180px; }
+.chart-skeleton i {
+  flex: 1; background: var(--surface2); border-radius: 2px 2px 0 0;
+  animation: skel 1.2s ease-in-out infinite;
+}
+@keyframes skel { 0%,100% { opacity:.3 } 50% { opacity:.6 } }
+
+/* ── KPI STRIP (right panel) ─────────────────────────────────────────── */
+
+.kpi { display: flex; flex-direction: column; gap: 9px; }
+.kpi-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 10px 12px;
+  border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+}
+.kpi-row:hover { border-color: rgba(124,111,255,.3); }
+.kpi-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.kpi-value { font-family: var(--numeric); font-size: 24px; line-height: 1; color: var(--text); }
+.kpi-row.met .kpi-value { color: var(--good); }
+.kpi-sub { font-size: 9px; color: var(--muted2); margin-top: 2px; }

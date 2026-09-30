@@ -1,0 +1,90 @@
+import { api } from './api.js';
+
+/**
+ * The client-side mirror of the user's account.
+ *
+ * Deliberately thin: all study arithmetic lives on the server in
+ * server/metrics.js, so this only caches what the UI needs to avoid a round
+ * trip on every render (avatar, settings, the current topic).
+ */
+
+const listeners = new Set();
+
+export const store = {
+  user: null,
+  /** Non-fatal errors collected from the last API call, shown once. */
+  lastError: null,
+  presenceState: 'online',
+  spotify: {
+    configured: false,
+    connected: false,
+    player: null,
+    state: null,
+    ready: false,
+  },
+  sounds: { current: null, intensity: 0.7, master: 0.6 },
+  view: { month: null, chartMode: 'daily', selectedDay: null },
+};
+
+export function subscribe(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+export function emit() {
+  for (const fn of listeners) {
+    try {
+      fn(store);
+    } catch (err) {
+      console.error('[store] listener failed', err);
+    }
+  }
+}
+
+export const isSignedIn = () => Boolean(store.user);
+
+export function setUser(user) {
+  store.user = user;
+  emit();
+}
+
+export function patchUser(patch) {
+  if (!store.user) return;
+  store.user = { ...store.user, ...patch };
+  emit();
+}
+
+/** Persists avatar/settings changes and refreshes the cached user. */
+export async function saveProfile(patch) {
+  const { user } = await api.put('/api/me', patch);
+  setUser(user);
+  return user;
+}
+
+export const avatar = () => store.user?.avatar || {};
+export const settings = () => store.user?.settings || {};
+
+export async function updateSetting(key, value) {
+  return saveProfile({ settings: { ...settings(), [key]: value } });
+}
+
+// ── study data cache ─────────────────────────────────────────────────────
+//
+// The Analytics pane is the only consumer, and it refetches the whole month
+// overview on every mutation, so a one-entry cache is enough.
+
+export const studyCache = { overview: null, dirty: false };
+
+export function invalidateStudy() {
+  studyCache.dirty = true;
+}
+
+export async function fetchOverview({ month, mode } = {}) {
+  const params = new URLSearchParams();
+  if (month) params.set('month', month);
+  if (mode) params.set('mode', mode);
+  const overview = await api.get(`/api/study/overview?${params}`);
+  studyCache.overview = overview;
+  studyCache.dirty = false;
+  return overview;
+}

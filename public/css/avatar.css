@@ -1,0 +1,85 @@
+/* ── Avatar customizer ───────────────────────────────────────────────── */
+
+.ava-layout { display: grid; grid-template-columns: 260px 1fr; gap: 18px; align-items: start; }
+@media (max-width: 820px) { .ava-layout { grid-template-columns: 1fr; } }
+
+.ava-stage {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 24px 18px;
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 40%, rgba(124,111,255,.12), transparent 70%),
+    var(--surface);
+  border: 1px solid var(--border);
+  position: sticky; top: 0;
+}
+.ava-stage canvas {
+  image-rendering: pixelated; image-rendering: crisp-edges;
+  display: block;
+}
+.ava-stage-label {
+  font-family: var(--pixel); font-size: 7px; letter-spacing: 1px;
+  color: var(--accent3); text-shadow: 0 0 8px var(--accent3);
+}
+.ava-stage-sub { font-size: 10px; color: var(--muted); text-align: center; }
+
+/* ── POSE PICKER ─────────────────────────────────────────────────────── */
+
+.pose-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px,1fr)); gap: 8px; }
+.pose-btn {
+  padding: 9px 6px; border-radius: 11px;
+  border: 1px solid var(--border); background: var(--surface);
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  cursor: pointer; transition: all .18s;
+}
+.pose-btn:hover { border-color: rgba(124,111,255,.4); background: var(--surface2); transform: translateY(-1px); }
+.pose-btn.active { border-color: var(--accent); background: rgba(124,111,255,.14); }
+.pose-btn canvas {
+  image-rendering: pixelated; display: block;
+}
+.pose-btn-name { font-size: 9px; color: var(--muted); font-weight: 600; text-align: center; }
+.pose-btn.active .pose-btn-name { color: var(--accent); }
+
+/* ── CUSTOMIZER GROUPS ───────────────────────────────────────────────── */
+
+.opt-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.opt-btn {
+  padding: 6px 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); font-size: 11px; font-weight: 500; cursor: pointer;
+  transition: all .18s;
+}
+.opt-btn:hover { border-color: var(--border2); color: var(--text); }
+.opt-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(124,111,255,.1); }
+
+.swatch-row { display: flex; gap: 7px; flex-wrap: wrap; }
+.color-swatch {
+  width: 27px; height: 27px; border-radius: 7px; cursor: pointer;
+  border: 2px solid transparent; transition: transform .16s;
+}
+.color-swatch:hover { transform: scale(1.12); }
+.color-swatch.active { border-color: #fff; transform: scale(1.12); }
+
+.backdrop-tile {
+  width: 54px; height: 40px; border-radius: 9px;
+  border: 2px solid transparent; cursor: pointer;
+  transition: all .18s;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding-bottom: 3px; font-size: 7px; color: rgba(255,255,255,.8);
+}
+.backdrop-tile:hover { transform: translateY(-2px); }
+.backdrop-tile.active { border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+
+/* ── PRESETS ─────────────────────────────────────────────────────────── */
+
+.preset-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.preset-slot {
+  width: 66px; height: 76px; border-radius: 11px;
+  border: 2px dashed var(--border); background: var(--surface);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 5px; cursor: pointer; transition: all .18s;
+}
+.preset-slot:hover { border-color: var(--accent); }
+.preset-slot.filled { border-style: solid; background: var(--surface2); }
+.preset-slot canvas { image-rendering: pixelated; display: block; }
+.preset-slot .slot-hint { font-size: 8px; color: var(--muted2); }

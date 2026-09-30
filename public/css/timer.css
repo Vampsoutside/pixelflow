@@ -1,0 +1,218 @@
+/* ── Timer section: wheels, ring, controls ────────────────────────────── */
+
+.timer-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 18px; padding-top: 4px;
+}
+
+/* Mode switch */
+.mode-tabs {
+  display: flex; gap: 3px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 3px;
+}
+.mode-tab {
+  padding: 7px 16px; border-radius: 7px;
+  background: transparent; color: var(--muted);
+  font-size: 10px; font-weight: 700; letter-spacing: .8px;
+  cursor: pointer; transition: all .2s;
+}
+.mode-tab:hover { color: var(--text); }
+.mode-tab.active { background: var(--accent); color: #fff; box-shadow: 0 0 16px rgba(124,111,255,.5); }
+
+/* ── TIMER CARD ──────────────────────────────────────────────────────── */
+
+#timer-card {
+  position: relative; overflow: hidden;
+  width: 420px; max-width: 100%;
+  padding: 26px 32px 24px;
+  text-align: center;
+  background: rgba(12,12,28,0.72);
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  backdrop-filter: blur(36px); -webkit-backdrop-filter: blur(36px);
+  box-shadow: 0 0 50px rgba(0,0,0,.4), 0 0 30px var(--accent-glow);
+  animation: card-in .6s cubic-bezier(.22,1,.36,1) both, pulse-glow 4s ease-in-out infinite;
+}
+#timer-card::before {
+  content: ''; position: absolute; top: -1px; left: 20%; right: 20%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(124,111,255,.6), transparent);
+}
+#timer-card.running { animation: card-in .6s cubic-bezier(.22,1,.36,1) both, pulse-glow 4s ease-in-out infinite; }
+#timer-card:not(.running) { animation: card-in .6s cubic-bezier(.22,1,.36,1) both; }
+
+/* ── SCROLL WHEELS ───────────────────────────────────────────────────── */
+
+.wheel-set { display: flex; align-items: center; gap: 12px; margin: 16px 0 4px; }
+
+.wheel {
+  position: relative;
+  width: 92px;
+  border-radius: 12px;
+  background: rgba(0,0,0,.28);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  touch-action: none;           /* let us own the vertical gesture */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+.wheel:active { cursor: grabbing; }
+.wheel[aria-disabled="true"] { cursor: not-allowed; opacity: .55; }
+
+/* The three-cell viewport: one above, the selection, one below. */
+.wheel-viewport {
+  height: 132px;                     /* 3 x 44px */
+  overflow: hidden;
+  position: relative;
+  /* Fades the partially visible neighbours so the selection reads clearly. */
+  mask-image: linear-gradient(180deg, transparent 0%, #000 26%, #000 74%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 26%, #000 74%, transparent 100%);
+}
+.wheel-strip { will-change: transform; }
+.wheel-cell {
+  height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--numeric); font-size: 34px; line-height: 1;
+  color: var(--muted2);
+  transition: color .18s, transform .18s, opacity .18s;
+  opacity: .35;
+}
+.wheel-cell.near { opacity: .6; }
+.wheel-cell.active {
+  color: var(--text);
+  opacity: 1;
+  transform: scale(1.1);
+  text-shadow: 0 0 22px var(--accent-glow);
+}
+
+/* Chunky pixel highlight box around the selected cell. */
+.wheel-selector {
+  position: absolute; left: 6px; right: 6px;
+  top: 44px;                        /* the middle cell */
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(124,111,255,.14);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 18px var(--accent-glow), inset 0 0 12px rgba(124,111,255,.18);
+  pointer-events: none;
+  transition: border-color .25s, background .25s, box-shadow .25s;
+}
+.wheel[data-accent="break"] .wheel-selector {
+  border-color: var(--accent3);
+  background: rgba(107,255,218,.12);
+  box-shadow: 0 0 18px rgba(107,255,218,.3), inset 0 0 12px rgba(107,255,218,.16);
+}
+.wheel[data-accent="break"] .wheel-cell.active { text-shadow: 0 0 22px rgba(107,255,218,.5); }
+
+.wheel-label {
+  margin-top: 6px; text-align: center;
+  font-family: var(--pixel); font-size: 6px;
+  letter-spacing: 1px; color: var(--muted);
+}
+
+.wheel-col { display: flex; flex-direction: column; align-items: center; }
+.wheel-sep {
+  font-family: var(--numeric); font-size: 40px; line-height: 1;
+  color: var(--muted);
+  align-self: center;
+  /* Sits on the selected row rather than the middle of the 132px viewport. */
+  margin-bottom: 88px;
+  flex-shrink: 0;
+}
+.wheel-lock {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; color: var(--muted); margin-top: 8px;
+}
+
+/* ── RING ────────────────────────────────────────────────────────────── */
+
+.ring-wrap {
+  position: relative; width: 176px; height: 176px;
+  margin: 14px auto 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.ring-wrap svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.ring-bg   { fill: none; stroke: rgba(255,255,255,.05); stroke-width: 5; }
+.ring-fill {
+  fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round;
+  transition: stroke-dashoffset .9s linear, stroke .5s ease;
+  filter: drop-shadow(0 0 6px var(--accent));
+}
+.ring-inner { display: flex; flex-direction: column; align-items: center; z-index: 1; }
+.ring-time {
+  font-family: var(--numeric); font-size: 54px; line-height: 1;
+  letter-spacing: 2px; color: var(--text);
+  text-shadow: 0 0 24px rgba(124,111,255,.5);
+}
+.ring-sub {
+  font-size: 9px; font-weight: 700; letter-spacing: 3px;
+  color: var(--muted); text-transform: uppercase; margin-top: 4px;
+  text-align: center; max-width: 150px;
+}
+
+/* ── POMODORO DOTS ───────────────────────────────────────────────────── */
+
+.pom-dots { display: flex; gap: 7px; justify-content: center; margin-bottom: 16px; }
+.pom-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--surface3); border: 1px solid var(--border);
+  transition: all .3s;
+}
+.pom-dot.lit { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.pom-dot.break-lit { background: var(--accent3); border-color: var(--accent3); box-shadow: 0 0 8px var(--accent3); }
+
+/* ── CONTROLS ────────────────────────────────────────────────────────── */
+
+.controls { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.ctrl {
+  width: 42px; height: 42px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .18s;
+}
+.ctrl:hover { border-color: var(--accent); color: var(--text); background: var(--surface2); }
+.play-ctrl {
+  width: 58px; height: 58px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 22px;
+  box-shadow: 0 0 24px rgba(124,111,255,.5);
+  transition: transform .16s, box-shadow .18s;
+}
+.play-ctrl:hover { transform: scale(1.06); box-shadow: 0 0 36px rgba(124,111,255,.7); }
+.play-ctrl:active { transform: scale(.95); }
+.play-ctrl.break { background: var(--accent3); color: #06231d; box-shadow: 0 0 24px rgba(107,255,218,.5); }
+
+/* ── TOPIC CHIPS ─────────────────────────────────────────────────────── */
+
+.topic-row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-bottom: 4px; }
+.topic-chip {
+  padding: 5px 12px; border-radius: 20px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: all .18s;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.topic-chip:hover { border-color: var(--border2); color: var(--text); }
+.topic-chip.active { color: #fff; }
+.topic-chip .tc-x {
+  font-size: 12px; line-height: 1; opacity: .5; margin-left: 1px;
+  padding: 0 1px; border-radius: 3px;
+}
+.topic-chip .tc-x:hover { opacity: 1; background: rgba(0,0,0,.3); }
+.topic-chip.add { border-style: dashed; color: var(--muted2); }
+
+.quick-row { display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+.quick-chip {
+  padding: 4px 10px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); font-family: var(--numeric); font-size: 16px;
+  line-height: 1.1; transition: all .18s;
+}
+.quick-chip:hover { border-color: var(--accent); color: var(--accent); }
+.quick-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(124,111,255,.12); }
+
+.timer-note {
+  font-size: 10px; color: var(--muted2); text-align: center;
+  margin-top: 8px; max-width: 320px;
+}
