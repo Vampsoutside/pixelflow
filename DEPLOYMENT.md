@@ -16,7 +16,7 @@ is thrown away when the instance recycles.
 `server/db.js` handles this by trying the local `data/` directory first, then
 `/tmp`, then in-memory. On Vercel it will land on one of the last two, so:
 
-- The app **boots and works** — it seeds the demo accounts automatically.
+- The app **boots and works** — the first visitor makes their own account.
 - Your data **does not persist**, and concurrent instances do not share it.
 
 `GET /api/health` tells you which mode you are in:
@@ -25,8 +25,9 @@ is thrown away when the instance recycles.
 { "ok": true, "users": 3, "storage": "ephemeral" }
 ```
 
-`"storage": "persistent"` means you have a real disk. `"ephemeral"` means you
-are on a serverless host.
+`"turso"` means a hosted database is wired up, `"persistent"` means you have a
+real disk, `"ephemeral"` means you are on a serverless host with per-instance
+storage.
 
 ### If you need real data to stick
 
@@ -36,16 +37,37 @@ Pick one:
 any VPS run `npm start` as-is and the SQLite file persists. Use Vercel only for
 the front end if you want a CDN in front, or skip Vercel entirely.
 
-**B. A hosted SQLite (Turso / libSQL) on Vercel.** This is the right answer if
-you want Vercel specifically, but it is a real code change, not a config tweak:
-`node:sqlite` is **synchronous**, and `@libsql/client` is **async**. Every query
-in `store.js` and the route files is currently written as a straight
-synchronous call, so swapping the driver means making those paths `await` and
-threading `await` back through the callers. The pure maths in `metrics.js` is
-unaffected.
+**B. A hosted SQLite (Turso / libSQL) on Vercel — the recommended path.**
+`server/db.js` speaks libSQL already, so this is a config change: set the two
+`TURSO_*` variables and the same code talks to a hosted database instead of a
+local file. See [Using Turso](#using-turso) below.
 
 Do not try to work around this by pointing `DB_PATH` at a file in the repo —
 the bundle is read-only and discarded on every deploy regardless.
+
+### Using Turso
+
+```bash
+npm install -g @libsql/cli
+turso login
+turso db create pixelflow            # note the URL it prints
+turso db tokens create pixelflow --json   # note the JWT
+```
+
+Then set both variables — in `.env` locally, or in Vercel under
+**Settings → Environment Variables**:
+
+```
+TURSO_DATABASE_URL=libsql://your-db-xyz.turso.io
+TURSO_AUTH_TOKEN=eyJhbGciOi...
+```
+
+`TURSO_DATABASE_URL` is all that is required; the token is only needed if the
+database is not fully public. When both are set, `GET /api/health` reports
+`"storage": "turso"`.
+
+The schema is applied automatically on every boot, so there is no separate
+migration step to run.
 
 ---
 
@@ -103,7 +125,8 @@ Only needed if you want the Spotify player. Add them under
 |---|---|
 | `SPOTIFY_CLIENT_ID` | Spotify app client id |
 | `SPOTIFY_CLIENT_SECRET` | Spotify app client secret |
-| `PIXELFLOW_NO_AUTOSEED` | set to `1` to start with an empty database |
+| `TURSO_DATABASE_URL` | hosted database URL — set this on Vercel so data persists |
+| `TURSO_AUTH_TOKEN` | token for that database |
 
 The Spotify **redirect URI** in your Spotify developer dashboard must match your
 Vercel domain exactly, e.g. `https://your-app.vercel.app/api/spotify/callback`.

@@ -2,7 +2,7 @@
   "name": "pixelflow",
   "version": "2.0.0",
   "private": true,
-  "description": "PixelFlow \u2014 pixel-art pomodoro, study tracker and focus app",
+  "description": "PixelFlow — pixel-art pomodoro, study tracker and focus app",
   "type": "module",
   "engines": {
     "node": "24.x"
@@ -15,6 +15,7 @@
     "check": "node --check server/index.js"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "express": "^4.21.2"
   }
 }

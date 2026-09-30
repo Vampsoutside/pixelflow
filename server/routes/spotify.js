@@ -1,9 +1,9 @@
-import { Router } from 'express';
+import { asyncRouter } from '../http.js';
 import { db } from '../db.js';
 import { requireAuth, newState, verifyState } from '../auth.js';
 import { log } from '../store.js';
 
-const router = Router();
+const router = asyncRouter();
 
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || '';
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || '';
@@ -23,7 +23,7 @@ const SCOPES = ['streaming', 'user-read-email', 'user-read-private'].join(' ');
 
 export const spotifyConfigured = () => Boolean(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET);
 
-router.get('/config', (_req, res) => {
+router.get('/config', async (_req, res) => {
   res.json({
     configured: spotifyConfigured(),
     clientId: SPOTIFY_CLIENT_ID || null,
@@ -35,12 +35,12 @@ router.get('/config', (_req, res) => {
 
 // ── step 1: bounce the user to Spotify's consent screen ──────────────────
 
-router.get('/login', requireAuth, (req, res) => {
+router.get('/login', requireAuth, async (req, res) => {
   if (!spotifyConfigured()) {
     return res.redirect('/?spotify=unconfigured');
   }
   const state = newState();
-  db.prepare('INSERT INTO oauth_states (state, user_id, created_at) VALUES (?,?,?)')
+  await db.prepare('INSERT INTO oauth_states (state, user_id, created_at) VALUES (?,?,?)')
     .run(state, req.user.id, Date.now());
 
   const params = new URLSearchParams({
@@ -75,7 +75,7 @@ router.get('/callback', async (req, res) => {
   if (error) return res.redirect(`/?spotify=denied`);
 
   // Single-use state, expired after 10 minutes.
-  const row = db.prepare('DELETE FROM oauth_states WHERE state = ?').get(String(state || ''));
+  const row = await db.prepare('DELETE FROM oauth_states WHERE state = ?').get(String(state || ''));
   if (!row || !verifyState(state) || Date.now() - row.created_at > 10 * 60 * 1000) {
     return res.redirect('/?spotify=bad-state');
   }
@@ -86,7 +86,7 @@ router.get('/callback', async (req, res) => {
       redirect_uri: REDIRECT_URI,
       grant_type: 'authorization_code',
     });
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO spotify_tokens (user_id, access_token, refresh_token, expires_at, scope)
       VALUES (?,?,?,?,?)
       ON CONFLICT(user_id) DO UPDATE SET
@@ -102,7 +102,7 @@ router.get('/callback', async (req, res) => {
       Date.now() + (token.expires_in || 3600) * 1000,
       token.scope || SCOPES,
     );
-    log(row.user_id, 'account', 'Connected your Spotify account');
+    await log(row.user_id, 'account', 'Connected your Spotify account');
     return res.redirect('/?spotify=connected');
   } catch (err) {
     console.error('[spotify] token exchange failed:', err.message);
@@ -118,7 +118,7 @@ router.get('/callback', async (req, res) => {
 // playback dies every hour.
 
 router.get('/token', requireAuth, async (req, res) => {
-  const row = db.prepare('SELECT * FROM spotify_tokens WHERE user_id = ?').get(req.user.id);
+  const row = await db.prepare('SELECT * FROM spotify_tokens WHERE user_id = ?').get(req.user.id);
   if (!row) return res.status(404).json({ error: 'Spotify is not connected.' });
 
   if (row.access_token && Date.now() < row.expires_at - 60_000) {
@@ -131,7 +131,7 @@ router.get('/token', requireAuth, async (req, res) => {
       grant_type: 'refresh_token',
     });
     const expiresAt = Date.now() + (token.expires_in || 3600) * 1000;
-    db.prepare(`
+    await db.prepare(`
       UPDATE spotify_tokens SET
         access_token = ?,
         refresh_token = COALESCE(NULLIF(?,''), refresh_token),
@@ -141,18 +141,18 @@ router.get('/token', requireAuth, async (req, res) => {
     return res.json({ access_token: token.access_token, expiresAt });
   } catch (err) {
     console.error('[spotify] refresh failed:', err.message);
-    db.prepare('DELETE FROM spotify_tokens WHERE user_id = ?').run(req.user.id);
+    await db.prepare('DELETE FROM spotify_tokens WHERE user_id = ?').run(req.user.id);
     return res.status(401).json({ error: 'Spotify session expired — reconnect your account.' });
   }
 });
 
-router.post('/disconnect', requireAuth, (req, res) => {
-  db.prepare('DELETE FROM spotify_tokens WHERE user_id = ?').run(req.user.id);
+router.post('/disconnect', requireAuth, async (req, res) => {
+  await db.prepare('DELETE FROM spotify_tokens WHERE user_id = ?').run(req.user.id);
   res.json({ ok: true });
 });
 
-router.get('/status', requireAuth, (req, res) => {
-  const row = db.prepare('SELECT expires_at FROM spotify_tokens WHERE user_id = ?').get(req.user.id);
+router.get('/status', requireAuth, async (req, res) => {
+  const row = await db.prepare('SELECT expires_at FROM spotify_tokens WHERE user_id = ?').get(req.user.id);
   res.json({ connected: Boolean(row) });
 });
 

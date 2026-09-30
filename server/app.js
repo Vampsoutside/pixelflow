@@ -2,7 +2,7 @@ import express from 'express';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { db, dbIsEphemeral } from './db.js';
+import { db, dbIsEphemeral, isRemote, migrate } from './db.js';
 import { attachUser, ensureCsrfCookie, csrfGuard, requireAuth } from './auth.js';
 import { getUser, saveUserFields } from './store.js';
 import authRoutes from './routes/auth.js';
@@ -62,29 +62,30 @@ app.use('/api', (req, res, next) => {
 // because it is reached by a top-level browser redirect with no custom header.
 app.use('/api', csrfGuard);
 
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', async (_req, res) => {
+  const users = await db.prepare('SELECT COUNT(*) AS n FROM users').get();
   res.json({
     ok: true,
-    users: db.prepare('SELECT COUNT(*) AS n FROM users').get().n,
-    storage: dbIsEphemeral ? 'ephemeral' : 'persistent',
+    users: users.n,
+    storage: isRemote ? 'turso' : (dbIsEphemeral ? 'ephemeral' : 'persistent'),
   });
 });
 
 // Profile reads and writes live at the top level so the client can use one
 // stable /api/me path for both.
-app.get('/api/me', (req, res) => {
-  res.json({ user: req.user ? getUser(req.user.id) : null });
+app.get('/api/me', async (req, res) => {
+  res.json({ user: req.user ? await getUser(req.user.id) : null });
 });
 
-app.put('/api/me', requireAuth, (req, res) => {
-  const user = getUser(req.user.id);
+app.put('/api/me', requireAuth, async (req, res) => {
+  const user = await getUser(req.user.id);
   if (!user) return res.status(404).json({ error: 'No such user' });
   const { avatar, settings } = req.body || {};
-  saveUserFields(user.id, {
+  await saveUserFields(user.id, {
     avatar: avatar && typeof avatar === 'object' ? avatar : undefined,
     settings: settings && typeof settings === 'object' ? settings : undefined,
   });
-  return res.json({ user: getUser(user.id) });
+  return res.json({ user: await getUser(user.id) });
 });
 
 app.use('/api/auth', authRoutes);
@@ -110,6 +111,8 @@ app.use((err, _req, res, _next) => {
   console.error('[pixelflow]', err);
   res.status(500).json({ error: 'Something went wrong on the server.' });
 });
+
+await migrate();
 
 // No demo accounts are created on boot — the first person to arrive makes
 // their own account through the sign-up form. `npm run seed` still exists for

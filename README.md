@@ -11,9 +11,9 @@ Logs, Settings.**
 
 | | |
 |---|---|
-| Runtime | Node 24 (needs `node:sqlite`, built in — no native build step) |
-| Server | Express 4, the only runtime dependency |
-| Database | SQLite via `node:sqlite` |
+| Runtime | Node 24+ (no native build step) |
+| Server | Express 4 |
+| Database | SQLite via `@libsql/client` — a local file, or Turso when `TURSO_DATABASE_URL` is set |
 | Front end | Vanilla ES modules, no bundler |
 | Tests | `node:test` (18 unit tests) + a Playwright browser suite (84 checks) |
 

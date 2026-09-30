@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { asyncRouter } from '../http.js';
 import { db, tx } from '../db.js';
 import {
   hashPassword, verifyPassword, setSessionCookie, clearSessionCookie,
@@ -6,7 +6,7 @@ import {
 } from '../auth.js';
 import { getUser, log, DEFAULT_SETTINGS } from '../store.js';
 
-const router = Router();
+const router = asyncRouter();
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/i;
 const EMAIL_RE = /^[^@\s]+@[^@\s.]+\.[^@\s]+$/;
@@ -22,12 +22,12 @@ function validateCredentials({ username, email, password }) {
   return null;
 }
 
-router.post('/signup', (req, res) => {
+router.post('/signup', async (req, res) => {
   const { username, email, password } = req.body || {};
   const problem = validateCredentials({ username, email, password });
   if (problem) return res.status(400).json({ error: problem });
 
-  const clash = db.prepare('SELECT username, email FROM users WHERE username = ? OR email = ?')
+  const clash = await db.prepare('SELECT username, email FROM users WHERE username = ? OR email = ?')
     .get(username, email);
   if (clash) {
     return res.status(409).json({
@@ -37,34 +37,34 @@ router.post('/signup', (req, res) => {
     });
   }
 
-  const info = db.prepare(
+  const info = await db.prepare(
     'INSERT INTO users (username, email, password_hash) VALUES (?,?,?)',
   ).run(username, email, hashPassword(password));
   const id = Number(info.lastInsertRowid);
 
   // A brand-new account starts with a sensible plan: Mon–Fri at the default
   // focus duration, so the tracker and its bars render something real.
-  tx(() => {
-    const insert = db.prepare(
+  await tx(async (t) => {
+    const insert = t.prepare(
       'INSERT INTO study_plans (user_id, weekday, planned_minutes, active) VALUES (?,?,?,1)',
     );
     for (const weekday of [1, 2, 3, 4, 5]) {
-      insert.run(id, weekday, DEFAULT_SETTINGS.focusMins * 60);
+      await insert.run(id, weekday, DEFAULT_SETTINGS.focusMins * 60);
     }
     // Carry over the prototype's starter tags so the Tasks pane is not empty.
-    const tag = db.prepare('INSERT INTO tags (user_id, name, color) VALUES (?,?,?)');
-    tag.run(id, 'Study', '#7c6fff');
-    tag.run(id, 'Work', '#6bffda');
+    const tag = t.prepare('INSERT INTO tags (user_id, name, color) VALUES (?,?,?)');
+    await tag.run(id, 'Study', '#7c6fff');
+    await tag.run(id, 'Work', '#6bffda');
   });
 
-  log(id, 'account', `Welcome to PixelFlow, ${username}!`);
+  await log(id, 'account', `Welcome to PixelFlow, ${username}!`);
   setSessionCookie(res, id);
-  return res.json({ user: getUser(id), csrfToken: csrfToken() });
+  return res.json({ user: await getUser(id), csrfToken: csrfToken() });
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   const { username, password } = req.body || {};
-  const row = db.prepare('SELECT * FROM users WHERE username = ? OR email = ?')
+  const row = await db.prepare('SELECT * FROM users WHERE username = ? OR email = ?')
     .get(username, username);
 
   // Same message either way so the endpoint cannot be used to enumerate accounts.
@@ -72,21 +72,21 @@ router.post('/login', (req, res) => {
     return res.status(401).json({ error: 'Wrong username or password.' });
   }
   setSessionCookie(res, row.id);
-  log(row.id, 'account', 'Signed in');
-  return res.json({ user: getUser(row.id), csrfToken: csrfToken() });
+  await log(row.id, 'account', 'Signed in');
+  return res.json({ user: await getUser(row.id), csrfToken: csrfToken() });
 });
 
-router.post('/logout', (req, res) => {
+router.post('/logout', async (req, res) => {
   clearSessionCookie(res);
   res.json({ ok: true });
 });
 
-router.get('/session', (req, res) => {
-  res.json({ user: req.user ? getUser(req.user.id) : null });
+router.get('/session', async (req, res) => {
+  res.json({ user: req.user ? await getUser(req.user.id) : null });
 });
 
-router.get('/users/:id', requireAuth, (req, res) => {
-  const user = getUser(Number(req.params.id));
+router.get('/users/:id', requireAuth, async (req, res) => {
+  const user = await getUser(Number(req.params.id));
   if (!user) return res.status(404).json({ error: 'No such user' });
   res.json({ user });
 });
