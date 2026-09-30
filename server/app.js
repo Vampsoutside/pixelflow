@@ -2,7 +2,7 @@ import express from 'express';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { db, dbIsEphemeral, isRemote, migrate } from './db.js';
+import { db, dbIsEphemeral, dbPath, isRemote, migrate, migrationError } from './db.js';
 import { attachUser, ensureCsrfCookie, csrfGuard, requireAuth } from './auth.js';
 import { getUser, saveUserFields } from './store.js';
 import authRoutes from './routes/auth.js';
@@ -63,12 +63,28 @@ app.use('/api', (req, res, next) => {
 app.use('/api', csrfGuard);
 
 app.get('/api/health', async (_req, res) => {
-  const users = await db.prepare('SELECT COUNT(*) AS n FROM users').get();
-  res.json({
-    ok: true,
-    users: users.n,
-    storage: isRemote ? 'turso' : (dbIsEphemeral ? 'ephemeral' : 'persistent'),
-  });
+  const storage = isRemote ? 'turso' : (dbIsEphemeral ? 'ephemeral' : 'persistent');
+
+  // The database path is an operational detail, but when a host cannot give us
+  // one at all it is the only thing that explains why every other endpoint is
+  // failing — so it is reported alongside the error.
+  try {
+    const users = await db.prepare('SELECT COUNT(*) AS n FROM users').get();
+    return res.json({
+      ok: migrationError === null,
+      users: users.n,
+      storage,
+      ...(migrationError ? { databaseError: migrationError } : {}),
+      ...(!isRemote && !dbIsEphemeral ? {} : { databasePath: dbPath }),
+    });
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      storage,
+      databaseError: migrationError || err.message,
+      databasePath: dbPath,
+    });
+  }
 });
 
 // Profile reads and writes live at the top level so the client can use one

@@ -13,7 +13,7 @@
  */
 
 import { createClient } from '@libsql/client';
-import { readFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,7 +45,17 @@ function resolveTarget() {
       // Resolve to an absolute path: the ephemeral check below compares against
       // absolute roots, so a relative DB_PATH would look per-instance.
       const full = resolve(path);
-      mkdirSync(dirname(full), { recursive: true });
+      const dir = dirname(full);
+      mkdirSync(dir, { recursive: true });
+
+      // Creating the directory is not proof the database can live there. A
+      // serverless bundle can hand back a directory that mkdir accepts and
+      // SQLite then fails to write to, which would take the whole function
+      // down at boot. Prove it with a real write.
+      const probe = join(dir, `.pf-write-probe-${process.pid}`);
+      writeFileSync(probe, 'ok');
+      unlinkSync(probe);
+
       return { url: `file:${full}`, remote: false };
     } catch {
       /* try the next candidate */
@@ -219,20 +229,51 @@ export function dateRange(from, to) {
   return out;
 }
 
-/** Applies the schema. Safe to run on every boot. */
+/** Set when the schema could not be applied, so /api/health can say so. */
+export let migrationError = null;
+
+/**
+ * Applies the schema. Safe to run on every boot.
+ *
+ * Never throws. A serverless host that cannot give us a database should still
+ * serve /api/health with an explanation, because a function that dies during
+ * module load answers every request — including the health check — with an
+ * opaque 500 and no way to find out why.
+ */
 export async function migrate() {
-  await db.exec(SCHEMA);
+  try {
+    // WAL is a nice-to-have: it needs shared memory that not every filesystem
+    // provides, and journal mode is a per-database setting, so a refusal here
+    // must not stop the schema from being created.
+    try {
+      await db.exec('PRAGMA journal_mode = WAL;');
+    } catch {
+      /* fine — the default rollback journal works */
+    }
+    // Foreign keys drive ON DELETE CASCADE. Same reasoning: it matters, but
+    // failing to set it is not a reason to serve nothing.
+    try {
+      await db.exec('PRAGMA foreign_keys = ON;');
+    } catch {
+      /* reported below only if the schema itself fails */
+    }
 
-  // CREATE TABLE IF NOT EXISTS cannot add a column to a table that already
-  // exists, so anything introduced after a database was first created has to
-  // be added explicitly. SQLite has no "ADD COLUMN IF NOT EXISTS", hence the
-  // pragma check.
-  const columns = async (table) => new Set(
-    (await db.prepare(`PRAGMA table_info(${table})`).all()).map((c) => c.name),
-  );
+    await db.exec(SCHEMA);
 
-  const userColumns = await columns('users');
-  if (!userColumns.has('is_guest')) {
-    await db.exec('ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0');
+    // CREATE TABLE IF NOT EXISTS cannot add a column to a table that already
+    // exists, so anything introduced after a database was first created has to
+    // be added explicitly. SQLite has no "ADD COLUMN IF NOT EXISTS", hence the
+    // pragma check.
+    const userColumns = new Set(
+      (await db.prepare('PRAGMA table_info(users)').all()).map((c) => c.name),
+    );
+    if (!userColumns.has('is_guest')) {
+      await db.exec('ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0');
+    }
+
+    migrationError = null;
+  } catch (err) {
+    migrationError = err.message;
+    console.error('[pixelflow] schema could not be applied:', err.message);
   }
 }

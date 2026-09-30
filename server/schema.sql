@@ -1,9 +1,10 @@
 -- ── PixelFlow schema ────────────────────────────────────────────────────
 -- All timestamps are ISO-8601 UTC strings (e.g. 2026-09-30T14:03:05.000Z).
 -- Study dates are plain local calendar days: 'YYYY-MM-DD'.
-
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
+--
+-- Connection PRAGMAs live in db.js, not here: journal_mode in particular is
+-- rejected by some filesystems, and running it as part of this batch would
+-- abort the whole schema on a host where WAL is unavailable.
 
 CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
