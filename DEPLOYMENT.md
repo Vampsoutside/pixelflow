@@ -165,6 +165,18 @@ SoundCloud box — which is the intended behaviour, not a break.
 
 ## 4. After deploying
 
+**Check `/api/health` first.** It should answer
+`{"ok":true,"users":…,"storage":…}`. If it 404s, the API is not wired up —
+see the note below — and nothing in the app will work, because every request
+goes through it.
+
+`vercel.json` forwards `/api/*` to the single `api/index.js` function. That
+rewrite is load-bearing: Vercel maps a file in `/api` to the route matching its
+path, so `api/index.js` on its own serves `/api` and nothing else, and
+`/api/auth/signup` would 404 before Express ever ran. The same app run locally
+serves every route, which is why this only ever shows up after deploying.
+`tests/vercel-config.test.js` guards the rule.
+
 Open the site. There are three ways in, and no configuration is needed for any
 of them:
 
