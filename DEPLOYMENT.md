@@ -112,9 +112,13 @@ SoundCloud box — which is the intended behaviour, not a break.
 
 ## 4. After deploying
 
-Sign in with **kira** or **milo**, password **pixelflow**. Change the password
-before you let anyone else in, and be aware these are public demo credentials
-that ship with the app.
+Open the site and click **Create an account** to register the first user. No
+demo accounts are created, and there are no preset credentials shipped with the
+app.
+
+Note that sign-up is open to anyone with the URL. If you would rather it not
+be, delete the deploy or put the project behind Vercel Authentication under
+**Settings → Security**.
 
 Check `/api/health` first if anything looks wrong:
 

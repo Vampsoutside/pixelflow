@@ -89,14 +89,6 @@ function wireAuth() {
     applyMode();
   });
 
-  $('#auth-demo').addEventListener('click', () => {
-    $('#a-user').value = 'kira';
-    $('#a-pass').value = 'pixelflow';
-    emailField.value = 'kira@pixelflow.test';
-    if (authMode !== 'login') { authMode = 'login'; applyMode(); }
-    form.requestSubmit();
-  });
-
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     error.hidden = true;

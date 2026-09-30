@@ -24,8 +24,12 @@ npm install
 npm start          # http://127.0.0.1:5173
 ```
 
-The database is created and seeded automatically on first boot. Sign in as
-**kira** or **milo** with the password **pixelflow**.
+The database is created empty on first boot. Click **Create an account** on the
+sign-in screen to make the first one — there are no preset logins.
+
+For local work you can still fill a database with sample data (two friends, a
+week of study history, tags and tasks) using `npm run seed`. That is opt-in and
+never runs on boot.
 
 ```bash
 npm run dev        # same, with --watch

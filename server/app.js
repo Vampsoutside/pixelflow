@@ -111,16 +111,7 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Something went wrong on the server.' });
 });
 
-// ── first boot ───────────────────────────────────────────────────────────
-
-// A fresh database is unusable, and on an ephemeral host every cold start is a
-// fresh database, so seed the demo accounts whenever there are none. Set
-// PIXELFLOW_NO_AUTOSEED=1 to start empty instead.
-if (process.env.PIXELFLOW_NO_AUTOSEED !== '1'
-  && db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0) {
-  const { seed } = await import('./seed.js');
-  seed({ quiet: true });
-  console.log('[pixelflow] seeded demo data — sign in as kira or milo, password: pixelflow');
-}
-
+// No demo accounts are created on boot — the first person to arrive makes
+// their own account through the sign-up form. `npm run seed` still exists for
+// filling a local database with sample data.
 export default app;
