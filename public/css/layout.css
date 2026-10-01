@@ -117,6 +117,42 @@
 }
 .rp-title { font-family: var(--pixel); font-size: 8px; color: var(--accent); letter-spacing: 1px; }
 .rp-tabs { display: flex; gap: 3px; flex-wrap: wrap; justify-content: flex-end; }
+.rp-collapse {
+  flex-shrink: 0; width: 22px; height: 22px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--border);
+  border-radius: 6px; color: var(--muted);
+  font-size: 9px; cursor: pointer; transition: all .2s;
+}
+.rp-collapse:hover { color: var(--text); border-color: var(--accent); background: var(--surface2); }
+
+.rp-body { flex: 1; overflow-y: auto; padding: 14px 16px 24px; }
+.rp-body[hidden] { display: none; }
+
+/* ── COLLAPSED PANEL ─────────────────────────────────────────────────── */
+
+/* The panel keeps its column but shrinks to zero, so the grid does not jump
+   and the centre column simply takes the space back. */
+#shell.rp-collapsed { --right-w: 0px; }
+#shell.rp-collapsed #right-panel {
+  border-left: none;
+  pointer-events: none;
+}
+#shell.rp-collapsed #stats-bar { right: 0; }
+
+.rp-restore {
+  position: fixed; top: 50%; right: 0; transform: translateY(-50%);
+  width: 18px; height: 62px; padding: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(10,10,22,0.9);
+  border: 1px solid var(--border); border-right: none;
+  border-radius: 8px 0 0 8px;
+  color: var(--muted); font-size: 9px; cursor: pointer;
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  transition: color .2s, border-color .2s, width .2s;
+}
+.rp-restore:hover { color: var(--text); border-color: var(--accent); width: 22px; }
+.rp-restore[hidden] { display: none; }
 .rp-tab {
   padding: 4px 9px; border-radius: 6px;
   background: transparent; color: var(--muted);

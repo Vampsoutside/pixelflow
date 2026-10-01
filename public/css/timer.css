@@ -45,6 +45,7 @@
 
 .wheel-set { display: flex; align-items: center; gap: 12px; margin: 16px 0 4px; }
 
+
 .wheel {
   position: relative;
   width: 92px;
@@ -116,8 +117,10 @@
   font-family: var(--numeric); font-size: 40px; line-height: 1;
   color: var(--muted);
   align-self: center;
-  /* Sits on the selected row rather than the middle of the 132px viewport. */
-  margin-bottom: 88px;
+  /* Each wheel column is the 132px viewport plus the HOURS/MINUTES caption
+     beneath it, so the column centres half a caption below the viewport. This
+     puts the colon back on the selected row. */
+  margin-bottom: 14px;
   flex-shrink: 0;
 }
 .wheel-lock {

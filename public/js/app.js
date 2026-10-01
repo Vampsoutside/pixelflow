@@ -56,6 +56,7 @@ async function boot() {
 async function enterApp() {
   $('#auth-overlay').hidden = true;
   $('#shell').hidden = false;
+  wireRightPanel();
   startPresence();
   await navigate('timer');
   await refreshStats();
@@ -261,12 +262,38 @@ function wireSidebar() {
     btn.addEventListener('click', () => navigate(btn.dataset.section));
   });
   $('#sb-account')?.addEventListener('click', () => {
-    document.getElementById('auth-overlay').hidden = false;
-    // Showing the overlay from the sidebar is a sign-out prompt, not a sign-up
-    // form, so hide the create-account affordance while it is open.
-    $('#auth-overlay').dataset.mode = 'signed-in';
-    toast('Sign out from Settings, or close this with Escape', 3200);
+    // This used to pop the sign-in overlay, which read as "you have been
+    // logged out" — it is an account link, so go to the account section.
+    navigate('settings');
   });
+}
+
+// ── collapsible right panel ──────────────────────────────────────────────
+
+const RP_KEY = 'pixelflow:rp-collapsed';
+let rpWired = false;
+
+function wireRightPanel() {
+  if (rpWired) return;
+  rpWired = true;
+  const shell = $('#shell');
+  const collapse = $('#rp-collapse');
+  const restore = $('#rp-restore');
+
+  const apply = (collapsed) => {
+    shell.classList.toggle('rp-collapsed', collapsed);
+    restore.hidden = !collapsed;
+    collapse.setAttribute('aria-expanded', String(!collapsed));
+    try { localStorage.setItem(RP_KEY, collapsed ? '1' : '0'); } catch { /* private mode */ }
+  };
+
+  collapse.addEventListener('click', () => apply(true));
+  restore.addEventListener('click', () => apply(false));
+
+  // Remembered, so the panel does not reappear on every reload.
+  let startCollapsed = false;
+  try { startCollapsed = localStorage.getItem(RP_KEY) === '1'; } catch { /* ignore */ }
+  apply(startCollapsed);
 }
 
 async function navigate(section) {
@@ -307,7 +334,12 @@ async function navigate(section) {
     console.error(`[pixelflow] ${section} failed to mount`, err);
   }
 
-  location.hash = section;
+  // Reflect the section in the URL without pushing a history entry per tab.
+  // `location.hash = section` added one, so three tab clicks left six entries
+  // and the browser's Back button — or a swipe-back gesture on a phone —
+  // walked back through the tab history and jumped to Friends for no visible
+  // reason. replaceState keeps the deep link without the trap.
+  history.replaceState(null, '', `#${section}`);
 }
 
 // ── floating avatar ──────────────────────────────────────────────────────

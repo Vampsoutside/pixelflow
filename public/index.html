@@ -110,9 +110,15 @@
     <div class="rp-header">
       <div class="rp-title" id="rp-title">TASKS</div>
       <div class="rp-tabs" id="rp-tabs"></div>
+      <button class="rp-collapse" id="rp-collapse" title="Hide this panel"
+              aria-label="Hide this panel" aria-expanded="true" aria-controls="rp-body">&#10094;</button>
     </div>
     <div class="rp-body" id="rp-body"></div>
   </aside>
+
+  <!-- Reappears when the panel is collapsed, since the panel itself is gone. -->
+  <button class="rp-restore" id="rp-restore" hidden
+          title="Show the panel" aria-label="Show the panel" aria-controls="rp-body">&#10095;</button>
 </div>
 
 <!-- ── PERSISTENT BARS ──────────────────────────────────────────────── -->

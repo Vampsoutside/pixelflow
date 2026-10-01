@@ -3,6 +3,11 @@ import { el, clamp } from './ui.js';
 const CELL_H = 44;
 const VIEWPORT_CELLS = 3;      // one above, the selection, one below
 const SNAP_EPSILON = 0.35;     // fraction of a cell that still counts as "settled"
+// The selector highlights the middle row of the viewport, not the first, so the
+// strip is pushed down by one cell at rest. Without this, index 0 leaves "0" in
+// the top row while the highlight — and therefore what reads as the value —
+// sits on the next number.
+const REST_OFFSET = CELL_H * ((VIEWPORT_CELLS - 1) / 2);
 
 /**
  * A pixel-style vertical scroll wheel.
@@ -75,7 +80,7 @@ export function createWheel({
 
   /** Paints the strip transform and the near/active cell classes. */
   function paint() {
-    strip.style.transform = `translateY(${-offset}px)`;
+    strip.style.transform = `translateY(${REST_OFFSET - offset}px)`;
     for (let i = 0; i < cells.length; i += 1) {
       const distance = Math.abs(offset / CELL_H - i);
       cells[i].classList.toggle('active', distance < SNAP_EPSILON);
