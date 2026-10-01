@@ -151,8 +151,10 @@ export async function upsertEntry(userId, date, minutes, source = 'manual', sess
 export async function addEntryMinutes(userId, date, minutes, sessionId = null) {
   const row = await db.prepare('SELECT minutes FROM study_entries WHERE user_id = ? AND date = ?')
     .get(userId, date);
-  const next = Math.max(0, (row?.minutes ?? 0) + minutes);
-  upsertEntry(userId, date, next, sessionId ? 'timer' : 'manual', sessionId);
+  const next = Math.max(0, (row?.minutes ?? 0) + Math.round(minutes));
+  // Awaited: the return value is read as if the write had happened, and an
+  // un-awaited insert here returns a number the database has not accepted yet.
+  await upsertEntry(userId, date, next, sessionId ? 'timer' : 'manual', sessionId);
   return next;
 }
 

@@ -133,11 +133,25 @@ router.put('/:id', async (req, res) => {
   const body = req.body || {};
   if (body.title !== undefined || body.date !== undefined || body.kind !== undefined
       || body.time !== undefined || body.minutes !== undefined) {
+    const kind = body.kind ?? existing.kind;
+    // A deadline is a day, not a moment, so a resolved deadline must not
+    // inherit a time from the row it used to be. Converting a timed event with
+    // {kind:'deadline'} sends no `time` at all, and passing the stored 09:30
+    // through would trip readItem's own rule and 400 the one edit the calendar
+    // has to be able to make.
+    //
+    // Presence decides, never nullishness: `time: null` is how a client says
+    // "clear this", and `??` would read it as absent and put 09:30 straight
+    // back. An explicitly-sent time is still validated, so
+    // {kind:'deadline', time:'09:30'} is rejected rather than silently dropped.
+    const time = Object.hasOwn(body, 'time')
+      ? body.time
+      : (kind === 'deadline' ? null : existing.time);
     const parsed = readItem({
       title: body.title ?? existing.title,
       date: body.date ?? existing.date,
-      kind: body.kind ?? existing.kind,
-      time: body.time ?? existing.time ?? '',
+      kind,
+      time,
       minutes: body.minutes ?? existing.minutes,
     });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error });

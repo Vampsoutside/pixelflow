@@ -3,7 +3,7 @@ import { asyncRouter } from '../http.js';
 import { db, tx } from '../db.js';
 import {
   hashPassword, verifyPassword, setSessionCookie, clearSessionCookie,
-  requireAuth, csrfToken, newState, verifyState,
+  requireAuth, csrfTokenFor, newState, verifyState,
 } from '../auth.js';
 import { getUser, consumeLoginState, DEFAULT_SETTINGS } from '../store.js';
 import {
@@ -63,7 +63,7 @@ router.post('/signup', async (req, res) => {
   });
 
   setSessionCookie(res, id);
-  return res.json({ user: await getUser(id), csrfToken: csrfToken() });
+  return res.json({ user: await getUser(id), csrfToken: csrfTokenFor(req) });
 });
 
 router.post('/login', async (req, res) => {
@@ -76,7 +76,7 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Wrong username or password.' });
   }
   setSessionCookie(res, row.id);
-  return res.json({ user: await getUser(row.id), csrfToken: csrfToken() });
+  return res.json({ user: await getUser(row.id), csrfToken: csrfTokenFor(req) });
 });
 
 router.post('/logout', async (_req, res) => {
@@ -93,7 +93,7 @@ router.post('/logout', async (_req, res) => {
  * discarded, so nobody can sign into it later, and `is_guest` marks the
  * account as claimable before its data is thrown away.
  */
-router.post('/guest', async (_req, res) => {
+router.post('/guest', async (req, res) => {
   // Retry on the astronomically unlikely id collision rather than failing.
   for (let attempt = 0; attempt < 5; attempt++) {
     const tag = randomBytes(5).toString('base64url');
@@ -124,7 +124,7 @@ router.post('/guest', async (_req, res) => {
     });
 
     setSessionCookie(res, id);
-    return res.json({ user: await getUser(id), csrfToken: csrfToken() });
+    return res.json({ user: await getUser(id), csrfToken: csrfTokenFor(req) });
   }
 
   return res.status(500).json({ error: 'Could not start a guest session.' });
@@ -158,17 +158,37 @@ router.post('/claim', requireAuth, async (req, res) => {
     'UPDATE users SET username = ?, email = ?, password_hash = ?, is_guest = 0 WHERE id = ?',
   ).run(username, email, hashPassword(password), user.id);
 
-  return res.json({ user: await getUser(user.id), csrfToken: csrfToken() });
+  return res.json({ user: await getUser(user.id), csrfToken: csrfTokenFor(req) });
 });
 
 router.get('/session', async (req, res) => {
   res.json({ user: req.user ? await getUser(req.user.id) : null });
 });
 
+/**
+ * A public view of another account.
+ *
+ * getUser() is the caller's own record and carries an email address, settings
+ * and a guest flag — none of which any other account has any business reading.
+ * The friends pane builds its cards from real queries (see friendCard), so
+ * nothing needs the private shape; this projection is the safe default for
+ * "look up a user by id".
+ */
+function publicUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    level: user.level,
+    xp: user.xp,
+    avatar: user.avatar,
+    createdAt: user.createdAt,
+  };
+}
+
 router.get('/users/:id', requireAuth, async (req, res) => {
   const user = await getUser(Number(req.params.id));
   if (!user) return res.status(404).json({ error: 'No such user' });
-  res.json({ user });
+  res.json({ user: publicUser(user) });
 });
 
 // ── sign in with Google / Microsoft ───────────────────────────────────────

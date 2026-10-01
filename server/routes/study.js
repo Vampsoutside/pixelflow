@@ -186,7 +186,11 @@ router.put('/plan/all', async (req, res) => {
   for (const r of rows) {
     const day = Number(r?.weekday);
     if (!Number.isInteger(day) || day < 0 || day > 6) continue;
-    stmt.run(req.user.id, day,
+    // Awaited: the response below re-reads the plan, so an un-awaited write
+    // could be answered with the values it just replaced. That is invisible
+    // against a local file and a real race over Turso, where the round trip
+    // outlasts the read.
+    await stmt.run(req.user.id, day,
       Math.max(0, Math.min(24 * 60, Math.round(Number(r.planned_minutes) || 0))),
       r.active ? 1 : 0);
   }
@@ -214,17 +218,24 @@ router.post('/sessions', async (req, res) => {
       const date = localDate();
       const row = await db.prepare('SELECT minutes FROM study_entries WHERE user_id = ? AND date = ?')
         .get(req.user.id, date);
-      added = seconds / 60;
-      await db.prepare(`
-        INSERT INTO study_entries (user_id, date, minutes, source, session_id, updated_at)
-        VALUES (?,?,?,'timer',?,?)
-        ON CONFLICT(user_id, date) DO UPDATE SET
-          minutes = study_entries.minutes + excluded.minutes,
-          source = 'timer', session_id = excluded.session_id, updated_at = excluded.updated_at
-      `).run(req.user.id, date, added, sessionId, new Date().toISOString());
-      await recordStudyChange(req.user.id, {
-        date, minutes: added, source: 'timer', sessionId, tagId,
-      });
+      // Whole minutes only. The rollup and the ledger are read by different
+      // screens (every chart reads study_entries, the Logs feed and the
+      // per-tag breakdown read study_log_entries), and recordStudyChange
+      // rounds — so an unrounded 1.5 here left the day and the log permanently
+      // a half-minute apart.
+      added = Math.round(seconds / 60);
+      if (added > 0) {
+        await db.prepare(`
+          INSERT INTO study_entries (user_id, date, minutes, source, session_id, updated_at)
+          VALUES (?,?,?,'timer',?,?)
+          ON CONFLICT(user_id, date) DO UPDATE SET
+            minutes = study_entries.minutes + excluded.minutes,
+            source = 'timer', session_id = excluded.session_id, updated_at = excluded.updated_at
+        `).run(req.user.id, date, added, sessionId, new Date().toISOString());
+        await recordStudyChange(req.user.id, {
+          date, minutes: added, source: 'timer', sessionId, tagId,
+        });
+      }
     }
   }
 

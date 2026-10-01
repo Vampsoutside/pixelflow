@@ -69,11 +69,21 @@ export function readToken(token) {
 
 export const sessionDays = () => Math.max(1, Number(process.env.SESSION_DAYS) || 30);
 
+/**
+ * Whether cookies may carry the Secure attribute.
+ *
+ * .env.example documents USE_HTTPS=0/1 for exactly this, and setSessionCookie's
+ * comment pointed at it, but nothing read it — so the deployed app over HTTPS
+ * was still handing out a session cookie without Secure. Loopback HTTP stays
+ * the default so a laptop with no setup keeps working.
+ */
+const useHttps = () => /^(1|true|yes|on)$/i.test(String(process.env.USE_HTTPS || ''));
+
 export function setSessionCookie(res, userId) {
   res.cookie(SESSION_COOKIE, issueToken({ uid: userId }, sessionDays() * 86400), {
     httpOnly: true,
     sameSite: 'lax',
-    secure: false, // loopback HTTP is fine; flip with USE_HTTPS behind a tunnel
+    secure: useHttps(),
     maxAge: sessionDays() * 86400 * 1000,
     path: '/',
   });
@@ -92,6 +102,17 @@ export const csrfToken = () => createHash('sha256')
   .digest('base64url')
   .slice(0, 32);
 
+/**
+ * The CSRF token this request must answer with, as a JSON body field.
+ *
+ * Sign-in routes return this so a client that keeps the token in memory — the
+ * way public/js/api.js does, reading the cookie — has something to read on the
+ * very response that creates the session. It has to be the *cookie's* value:
+ * a freshly generated token would never match, and every write that used it
+ * would be rejected.
+ */
+export const csrfTokenFor = (req) => req.cookies?.[`${SESSION_COOKIE}_csrf`] ?? null;
+
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 export function csrfGuard(req, res, next) {
@@ -103,7 +124,14 @@ export function csrfGuard(req, res, next) {
     return res.status(403).json({ error: 'Missing CSRF token' });
   }
   const cookieToken = req.cookies?.[`${SESSION_COOKIE}_csrf`];
-  if (!cookieToken || !timingSafeEqual(Buffer.from(sent), Buffer.from(cookieToken))) {
+  // timingSafeEqual throws when the two buffers differ in length, so the
+  // lengths have to be compared first. Without this a wrong-length token
+  // escaped as a 500 from the error middleware instead of a 403 — and the
+  // client retries on 403, not 500, so it surfaced as a dead write.
+  const sentBuf = Buffer.from(sent);
+  const cookieBuf = Buffer.from(String(cookieToken || ''));
+  if (!cookieToken || sentBuf.length !== cookieBuf.length
+      || !timingSafeEqual(sentBuf, cookieBuf)) {
     return res.status(403).json({ error: 'Bad CSRF token' });
   }
   return next();
