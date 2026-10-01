@@ -83,3 +83,14 @@
 .preset-slot.filled { border-style: solid; background: var(--surface2); }
 .preset-slot canvas { image-rendering: pixelated; display: block; }
 .preset-slot .slot-hint { font-size: 8px; color: var(--muted2); }
+
+/* ── CUSTOMISER IN THE MAIN PANE ──────────────────────────────────────────── */
+
+/* The customiser renders in two places at once — here and the right panel — so
+   it is laid out as a plain column that suits a narrow pane and a wide one
+   equally. Nothing inside may set an id, since the builder runs twice. */
+.ava-customiser {
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: 0; max-width: 460px;
+}
+.ava-customiser > * { max-width: 100%; }

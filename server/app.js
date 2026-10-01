@@ -9,8 +9,8 @@ import authRoutes from './routes/auth.js';
 import studyRoutes from './routes/study.js';
 import friendsRoutes from './routes/friends.js';
 import tasksRoutes from './routes/tasks.js';
+import eventsRoutes from './routes/events.js';
 import tagsRoutes from './routes/tags.js';
-import logsRoutes from './routes/logs.js';
 import spotifyRoutes from './routes/spotify.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -108,8 +108,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/study', studyRoutes);
 app.use('/api/friends', friendsRoutes);
 app.use('/api/tasks', tasksRoutes);
+app.use('/api/events', eventsRoutes);
 app.use('/api/tags', tagsRoutes);
-app.use('/api/logs', logsRoutes);
 app.use('/api/spotify', spotifyRoutes);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'No such endpoint' }));

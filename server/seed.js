@@ -20,7 +20,7 @@ export async function seed({ reset = false, quiet = false } = {}) {
     db.exec(`
     DELETE FROM task_tags; DELETE FROM tasks; DELETE FROM tags;
     DELETE FROM study_entries; DELETE FROM study_plans;
-    DELETE FROM timer_sessions; DELETE FROM logs;
+    DELETE FROM timer_sessions; DELETE FROM study_log_entries; DELETE FROM events;
     DELETE FROM friendships; DELETE FROM presence;
     DELETE FROM oauth_states; DELETE FROM spotify_tokens; DELETE FROM users;
     DELETE FROM sqlite_sequence;
@@ -185,20 +185,63 @@ export async function seed({ reset = false, quiet = false } = {}) {
       ['Physics exam — chapter 4 review', ['Exam prep', 'Study'], 0],
       ['Summarise last week’s seminar', ['Reading'], 0],
     ];
-    const taskStmt = await db.prepare('INSERT INTO tasks (user_id, text, done) VALUES (?,?,?)');
+    const taskStmt = await db.prepare('INSERT INTO tasks (user_id, text, done, done_at) VALUES (?,?,?,?)');
     const linkStmt = await db.prepare('INSERT INTO task_tags (task_id, tag_id) VALUES (?,?)');
     for (const [text, tagNames, done] of tasks) {
-      const info = await taskStmt.run(kiraId, text, done);
+      // done_at is what the Logs archive orders by, so a seeded completed task
+      // needs one or it would sort as if it had never happened.
+      const doneAt = done
+        ? new Date(Date.now() - Math.floor(Math.random() * 4) * 86400000).toISOString()
+        : null;
+      const info = await taskStmt.run(kiraId, text, done, doneAt);
       const taskId = Number(info.lastInsertRowid);
       for (const name of tagNames) {
         const tag = tagIds.find((t) => t.name === name);
         if (tag) await linkStmt.run(taskId, tag.id);
       }
     }
-    log('· created 5 tags and 7 tasks');
+    log('· created 5 tags and 7 tasks (2 already completed)');
   }
 
-  // ── presence and logs ────────────────────────────────────────────────────
+  // ── the study ledger ─────────────────────────────────────────────────────
+
+  // The daily rollup above is one number per day, which is all the charts need
+  // but nothing the Logs feed can show. Split each seeded day into a pomodoro
+  // chunk and a manual chunk under a tag, so the feed is populated on a fresh
+  // database without hand-crafting entries.
+  if (!await db.prepare('SELECT id FROM study_log_entries LIMIT 1').get()) {
+    const owned = await db.prepare('SELECT id, name FROM tags WHERE user_id = ?').all(kiraId);
+    if (owned.length > 0) {
+      const ledgerStmt = await db.prepare(`
+        INSERT INTO study_log_entries (user_id, date, minutes, source, tag_id, created_at)
+        VALUES (?,?,?,?,?,?)
+      `);
+      let rows = 0;
+      const rand = lcg(2024);
+      const days = await db.prepare(
+        'SELECT date, minutes FROM study_entries WHERE user_id = ? ORDER BY date',
+      ).all(kiraId);
+      for (const day of days) {
+        const minutes = Number(day.minutes);
+        if (minutes <= 0) continue;
+        const tag = owned[Math.floor(rand() * owned.length)];
+        // Roughly two thirds from the timer, the rest typed in by hand.
+        const fromTimer = Math.round((minutes * (0.4 + rand() * 0.4)) / 5) * 5;
+        const manual = minutes - fromTimer;
+        if (fromTimer > 0) {
+          await ledgerStmt.run(kiraId, day.date, fromTimer, 'timer', tag.id, nowIso());
+          rows += 1;
+        }
+        if (manual > 0) {
+          await ledgerStmt.run(kiraId, day.date, manual, 'manual', tag.id, nowIso());
+          rows += 1;
+        }
+      }
+      log(`· wrote ${rows} study log entries`);
+    }
+  }
+
+  // ── presence ─────────────────────────────────────────────────────────────
 
   await db.prepare(`
     INSERT INTO presence (user_id, state, activity, last_seen_at) VALUES (?,?,?,?)
@@ -209,10 +252,6 @@ export async function seed({ reset = false, quiet = false } = {}) {
     ON CONFLICT(user_id) DO UPDATE SET state = excluded.state, last_seen_at = excluded.last_seen_at
   `).run(kiraId, 'online', 'Studying', nowIso());
 
-  const logStmt = await db.prepare('INSERT INTO logs (user_id, kind, message, payload, created_at) VALUES (?,?,?,?,?)');
-  await logStmt.run(kiraId, 'account', 'Welcome to PixelFlow!', '{}', nowIso());
-  await logStmt.run(kiraId, 'plan', 'Set up a weekly plan of 34h across Mon–Sat', '{}', nowIso());
-  await logStmt.run(kiraId, 'friend', 'You and milo are now friends', '{}', nowIso());
 
   log(`\n  Sign in with  username: kira   or   milo        password: ${PASSWORD}\n`);
 

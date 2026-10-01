@@ -1,7 +1,7 @@
 import { asyncRouter } from '../http.js';
 import { db } from '../db.js';
 import { requireAuth, newState, verifyState } from '../auth.js';
-import { log, consumeLinkState } from '../store.js';
+import { consumeLinkState } from '../store.js';
 
 const router = asyncRouter();
 
@@ -104,7 +104,6 @@ router.get('/callback', async (req, res) => {
       Date.now() + (token.expires_in || 3600) * 1000,
       token.scope || SCOPES,
     );
-    await log(row.user_id, 'account', 'Connected your Spotify account');
     return res.redirect('/?spotify=connected');
   } catch (err) {
     console.error('[spotify] token exchange failed:', err.message);

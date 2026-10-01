@@ -5,8 +5,12 @@ import { createWheel, HOUR_VALUES, MINUTE_VALUES, QUICK_PRESETS } from './wheels
 import { findPose } from './avatar.js';
 
 const CIRC = 2 * Math.PI * 76;   // ring radius in the SVG viewBox
-const DEFAULT_TOPICS = ['Study', 'Work', 'Assignment', 'Break', 'Custom'];
-const TOPIC_COLORS = ['#7c6fff', '#ff6b9d', '#6bffda', '#ffb347', '#44aaff', '#aaffaa', '#ffaaff'];
+
+/**
+ * A break is not a tag. It is the one topic that is never study time, so it is
+ * kept out of the tag list and rendered as its own chip.
+ */
+export const BREAK = { id: null, name: 'Break', color: '#6bffda' };
 
 /**
  * The timer.
@@ -26,24 +30,67 @@ export const timer = {
   interval: null,
   handle: null,             // the server-side timer_session row
   pomodoros: 0,
-  topics: [...DEFAULT_TOPICS],
-  topic: 'Study',
-
-  // ── derived ────────────────────────────────────────────────────────────
-
-  get durationMinutes() {
-    return Math.max(1, Math.round(this.target / 60));
-  },
-  get isBreak() { return this.kind === 'break'; },
+  // Focus topics are the user's own tags, loaded from /api/tags. They used to
+  // be a hardcoded list mutated in memory, so anything added was gone on the
+  // next reload and nothing a session recorded could be analysed by subject.
+  topics: [],
+  topic: BREAK,
 };
 
 let ui = {};
 
-// ── topic colours ────────────────────────────────────────────────────────
+// ── tags ─────────────────────────────────────────────────────────────────
 
-function topicColor(name) {
-  const i = Math.max(0, timer.topics.indexOf(name));
-  return TOPIC_COLORS[i % TOPIC_COLORS.length];
+/** Loads the user's tags and picks the active topic. Safe to call repeatedly. */
+export async function loadTopics() {
+  try {
+    const { tags } = await api.get('/api/tags');
+    timer.topics = tags;
+  } catch {
+    // Offline or an older server: the timer still runs, it just cannot file a
+    // session under a tag.
+    timer.topics = timer.topics || [];
+  }
+  syncTopicFromSettings();
+  renderTopics();
+}
+
+/** Resolves the saved tag id, falling back to the first tag or a plain break. */
+function syncTopicFromSettings() {
+  const id = settings().activeTagId;
+  timer.topic = timer.topics.find((t) => t.id === id) || timer.topics[0] || BREAK;
+}
+
+export function renderTopics() {
+  if (!ui.topicRow) return;
+  ui.topicRow.innerHTML = '';
+
+  // Break first, because it is not a tag and cannot be deleted along with one.
+  for (const topic of [BREAK, ...timer.topics]) {
+    const active = topic === BREAK
+      ? timer.kind === 'break'
+      : timer.kind === 'focus' && topic.id === timer.topic?.id;
+    const chip = document.createElement('button');
+    chip.className = `topic-chip${active ? ' active' : ''}`;
+    chip.style.background = active ? topic.color : '';
+    chip.style.borderColor = active ? topic.color : '';
+    chip.innerHTML = `<span>${topic.name}</span>`;
+    chip.addEventListener('click', () => selectTopic(topic));
+    ui.topicRow.append(chip);
+  }
+
+  const add = document.createElement('button');
+  add.className = 'topic-chip add';
+  add.textContent = '+ tag';
+  add.title = 'Create a tag to file sessions under';
+  add.addEventListener('click', () => {
+    // Tags are owned by the Tasks panel, which creates them properly and keeps
+    // them in the database. A prompt here would create something that vanishes
+    // on reload — exactly the bug this replaced.
+    document.querySelector('[data-section="tasks"]')?.click();
+    toast('Create the tag in the Tasks panel, then come back');
+  });
+  ui.topicRow.append(add);
 }
 
 // ── view wiring (called by the timer section renderer) ───────────────────
@@ -114,74 +161,19 @@ function renderQuickChips(active) {
   }
 }
 
-function syncTopicFromSettings() {
-  const active = settings().activeTopic;
-  if (active && timer.topics.includes(active)) timer.topic = active;
-  else timer.topic = timer.topics[0];
-}
-
-export function renderTopics() {
-  if (!ui.topicRow) return;
-  ui.topicRow.innerHTML = '';
-  for (const name of timer.topics) {
-    const color = topicColor(name);
-    const chip = document.createElement('button');
-    chip.className = `topic-chip${name === timer.topic ? ' active' : ''}`;
-    chip.style.background = name === timer.topic ? color : '';
-    chip.style.borderColor = name === timer.topic ? color : '';
-    chip.innerHTML = `<span>${name}</span>`;
-    chip.addEventListener('click', () => selectTopic(name));
-
-    if (timer.topics.length > 1) {
-      const x = document.createElement('span');
-      x.className = 'tc-x';
-      x.textContent = '×';
-      x.title = `Remove “${name}”`;
-      x.addEventListener('click', (event) => {
-        event.stopPropagation();
-        removeTopic(name);
-      });
-      chip.append(x);
-    }
-    ui.topicRow.append(chip);
-  }
-
-  const add = document.createElement('button');
-  add.className = 'topic-chip add';
-  add.textContent = '+ topic';
-  add.addEventListener('click', addTopic);
-  ui.topicRow.append(add);
-}
-
-function selectTopic(name) {
-  timer.topic = name;
-  timer.kind = name === 'Break' ? 'break' : 'focus';
+/**
+ * Makes a tag (or Break) the active focus topic.
+ *
+ * Break is the one topic that is not a tag, so selecting it flips the session
+ * kind instead of saving an id. Everything else persists its tag id, which is
+ * what a finished session is filed under.
+ */
+function selectTopic(topic) {
+  timer.kind = topic === BREAK ? 'break' : 'focus';
+  if (topic !== BREAK) timer.topic = topic;
   renderTopics();
   paint();
-  updateSetting('activeTopic', name).catch(() => {});
-}
-
-async function addTopic() {
-  const name = window.prompt('New focus topic (this is the label the session logs under)');
-  const trimmed = String(name || '').trim().slice(0, 24);
-  if (!trimmed) return;
-  if (timer.topics.includes(trimmed)) {
-    selectTopic(trimmed);
-    return;
-  }
-  timer.topics.push(trimmed);
-  renderTopics();
-  selectTopic(trimmed);
-}
-
-function removeTopic(name) {
-  timer.topics = timer.topics.filter((t) => t !== name);
-  if (timer.topic === name) {
-    timer.topic = timer.topics[0];
-    updateSetting('activeTopic', timer.topic).catch(() => {});
-  }
-  renderTopics();
-  paint();
+  if (topic !== BREAK) updateSetting('activeTagId', topic.id).catch(() => {});
 }
 
 // ── painting ─────────────────────────────────────────────────────────────
@@ -193,10 +185,10 @@ function paint() {
   const shown = isStopwatch ? timer.elapsed : timer.remaining;
   ui.ringTime.textContent = clock(shown);
 
-  const label = timer.isBreak ? (timer.mode === 'pomodoro' ? 'BREAK' : 'REST') : timer.topic.toUpperCase();
+  const label = timer.isBreak ? (timer.mode === 'pomodoro' ? 'BREAK' : 'REST') : (timer.topic?.name || 'Focus').toUpperCase();
   ui.ringSub.textContent = label;
 
-  const color = timer.isBreak ? 'var(--accent3)' : topicColor(timer.topic);
+  const color = timer.isBreak ? BREAK.color : (timer.topic?.color || 'var(--accent)');
   ui.ringFill.style.stroke = color;
 
   let ratio;
@@ -293,10 +285,6 @@ export function start() {
   lockWheels(true);
   timer.interval = setInterval(tick, 1000);
 
-  api.post('/api/logs', {
-    kind: 'timer',
-    message: `Started a ${timer.durationMinutes}-minute ${timer.isBreak ? 'break' : timer.topic.toLowerCase()} session`,
-  }).catch(() => {});
 
   paint();
 }
@@ -346,13 +334,15 @@ async function complete() {
 
   const kind = timer.isBreak ? 'break' : 'focus';
   const focusSeconds = timer.elapsed;
-  const topic = timer.isBreak ? 'Break' : timer.topic;
+  const topic = timer.isBreak ? 'Break' : (timer.topic?.name || '');
 
   try {
     const result = await api.post('/api/study/sessions', {
       focus_seconds: focusSeconds,
       topic,
       kind,
+      // A break files no study time, so it sends no tag.
+      tagId: kind === 'focus' ? timer.topicId : null,
     });
     if (kind === 'focus') {
       timer.pomodoros += 1;

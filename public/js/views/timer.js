@@ -1,6 +1,6 @@
 import { el, clock, toast } from '../ui.js';
 import { settings, updateSetting } from '../store.js';
-import { timer, mountTimerView, setMode, toggle, reset, skipToBreak } from '../timer.js';
+import { timer, mountTimerView, setMode, toggle, reset, skipToBreak, loadTopics } from '../timer.js';
 import { createWheel, HOUR_VALUES, MINUTE_VALUES } from '../wheels.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -130,7 +130,7 @@ export const timerSection = {
       el('div', { class: 'sect-hd', style: { marginTop: '18px' }, text: 'FOCUS TOPIC' }),
       topicRow,
       el('div', { class: 'timer-note' }, [
-        el('span', { text: 'Drag or scroll the wheels to set any duration. Focus topics label the session and set the avatar pose — they no longer change its length.' }),
+        el('span', { text: 'Drag or scroll the wheels to set any duration. Pick a tag to file the session under — it also sets the avatar pose, and never changes the length.' }),
       ]),
     ]);
 
@@ -143,5 +143,10 @@ export const timerSection = {
       avaTag: document.getElementById('ava-tag'),
       hourWheel, minuteWheel,
     });
+
+    // The focus topics are the user's tags, so they have to come from the
+    // server. mountTimerView has already painted with whatever was cached;
+    // this redraws the row once the real list arrives.
+    loadTopics();
   },
 };

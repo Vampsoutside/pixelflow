@@ -132,13 +132,20 @@
 /* ── COLLAPSED PANEL ─────────────────────────────────────────────────── */
 
 /* The panel keeps its column but shrinks to zero, so the grid does not jump
-   and the centre column simply takes the space back. */
-#shell.rp-collapsed { --right-w: 0px; }
-#shell.rp-collapsed #right-panel {
+   and the centre column simply takes the space back.
+
+   This lives on <body>, not #shell: the Spotify dock and the stats bar are
+   siblings of #shell rather than descendants, so a class set on #shell could
+   not reach them and they stayed inset by the width of a panel that was no
+   longer on screen. A custom property on <body> cascades into the #shell grid
+   and into both fixed bars at once. */
+body.rp-collapsed { --right-w: 0px; }
+body.rp-collapsed #right-panel {
   border-left: none;
   pointer-events: none;
 }
-#shell.rp-collapsed #stats-bar { right: 0; }
+body.rp-collapsed #stats-bar,
+body.rp-collapsed #spotify-dock { right: 0; }
 
 .rp-restore {
   position: fixed; top: 50%; right: 0; transform: translateY(-50%);

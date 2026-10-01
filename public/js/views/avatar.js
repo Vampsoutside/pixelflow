@@ -78,6 +78,16 @@ function render() {
       ]),
     ]),
   ]));
+
+  // The customiser also lives in the side panel, but it cannot live only there:
+  // the panel is display:none below 900px and disappears when collapsed, which
+  // left a phone with no way to change anything about their avatar at all.
+  host.append(el('div', { class: 'pane' }, [
+    el('div', { class: 'sect-hd', text: 'CUSTOMISE' }),
+    el('div', { class: 'pane-sub', style: { marginBottom: '12px' }, text: 'Everything below also appears in the panel on the right.' }),
+    el('div', { class: 'ava-customiser' }, avatarCustomiser()),
+  ]));
+
   paintStage();
 }
 
@@ -140,17 +150,23 @@ function presetRow() {
     }));
 }
 
-// ── right panel: the customiser ──────────────────────────────────────────
+// ── the customiser ───────────────────────────────────────────────────────
 
-export function avatarSidePanel(body) {
-  panel = body;
-  renderSidePanelInto();
-}
+/**
+ * Builds the customiser controls.
+ *
+ * Returns a fresh array of nodes on every call rather than appending to one
+ * container, because it is rendered in two places at once — the main pane and
+ * the right panel. Nothing here may carry an `id`: the same builder runs twice
+ * on the same page, and a duplicate id would break label association and
+ * `#id` lookups for whichever copy mounted second.
+ */
+function avatarCustomiser() {
+  const nodes = [];
+  const push = (...items) => { nodes.push(...items); };
 
-function renderSidePanelInto() {
-  if (!panel) return;
   const a = currentAvatar();
-  panel.innerHTML = '';
+  const pet = isPet(a);
 
   const patch = async (changes, message) => {
     try {
@@ -163,10 +179,8 @@ function renderSidePanelInto() {
     }
   };
 
-  const pet = isPet(a);
-
-  panel.append(el('div', { class: 'sect-hd', text: 'COMPANION' }));
-  panel.append(el('div', { class: 'opt-row' }, [
+  push(el('div', { class: 'sect-hd', text: 'COMPANION' }));
+  push(el('div', { class: 'opt-row' }, [
     el('button', {
       class: `opt-btn${!pet ? ' active' : ''}`,
       text: '🧑 Person',
@@ -178,7 +192,7 @@ function renderSidePanelInto() {
       onclick: () => patch({ companion: p.id }, `${p.name} companion selected`),
     })),
   ]));
-  panel.append(el('div', {
+  push(el('div', {
     class: 'pane-sub',
     style: { marginTop: '6px' },
     text: pet
@@ -188,34 +202,34 @@ function renderSidePanelInto() {
 
   // Everything below the companion choice only applies to a person avatar.
   if (!pet) {
-  panel.append(el('div', { class: 'sect-hd', text: 'GENDER' }));
-  panel.append(el('div', { class: 'opt-row' }, ['female', 'male'].map((g) => el('button', {
-    class: `opt-btn${a.gender === g ? ' active' : ''}`,
-    text: g === 'female' ? 'Female' : 'Male',
-    onclick: () => patch({ gender: g }),
-  }))));
-
-  panel.append(el('div', { class: 'sect-hd', text: 'HAT' }));
-  panel.append(el('div', { class: 'opt-row' },
-    [['none', 'None'], ['cap', 'Cap'], ['beanie', 'Beanie'], ['headphones', 'Headphones']].map(([v, label]) => el('button', {
-      class: `opt-btn${(a.hat || 'none') === v ? ' active' : ''}`,
-      text: label,
-      onclick: () => patch({ hat: v }),
+    push(el('div', { class: 'sect-hd', text: 'GENDER' }));
+    push(el('div', { class: 'opt-row' }, ['female', 'male'].map((g) => el('button', {
+      class: `opt-btn${a.gender === g ? ' active' : ''}`,
+      text: g === 'female' ? 'Female' : 'Male',
+      onclick: () => patch({ gender: g }),
     }))));
 
-  panel.append(el('div', { class: 'sect-hd', text: 'SKIN TONE' }));
-  panel.append(swatchRow(SKINS, a.skin, (c) => patch({ skin: c })));
+    push(el('div', { class: 'sect-hd', text: 'HAT' }));
+    push(el('div', { class: 'opt-row' },
+      [['none', 'None'], ['cap', 'Cap'], ['beanie', 'Beanie'], ['headphones', 'Headphones']].map(([v, label]) => el('button', {
+        class: `opt-btn${(a.hat || 'none') === v ? ' active' : ''}`,
+        text: label,
+        onclick: () => patch({ hat: v }),
+      }))));
 
-  panel.append(el('div', { class: 'sect-hd', text: 'HAIR COLOUR' }));
-  panel.append(swatchRow(HAIRS, a.hair, (c) => patch({ hair: c })));
+    push(el('div', { class: 'sect-hd', text: 'SKIN TONE' }));
+    push(swatchRow(SKINS, a.skin, (c) => patch({ skin: c })));
+
+    push(el('div', { class: 'sect-hd', text: 'HAIR COLOUR' }));
+    push(swatchRow(HAIRS, a.hair, (c) => patch({ hair: c })));
   }  // end person-only options
 
   // The outfit swatch doubles as fur colour, so it stays for both subjects.
-  panel.append(el('div', { class: 'sect-hd', text: pet ? 'FUR COLOUR' : 'OUTFIT' }));
-  panel.append(swatchRow(OUTFITS, a.outfit, (c) => patch({ outfit: c })));
+  push(el('div', { class: 'sect-hd', text: pet ? 'FUR COLOUR' : 'OUTFIT' }));
+  push(swatchRow(OUTFITS, a.outfit, (c) => patch({ outfit: c })));
 
-  panel.append(el('div', { class: 'sect-hd', text: 'BACKDROP' }));
-  panel.append(el('div', { class: 'swatch-row' }, BACKDROPS.map((b) => el('div', {
+  push(el('div', { class: 'sect-hd', text: 'BACKDROP' }));
+  push(el('div', { class: 'swatch-row' }, BACKDROPS.map((b) => el('div', {
     class: `backdrop-tile${(a.backdrop || 'default') === b.id ? ' active' : ''}`,
     style: { background: b.bg },
     title: b.name,
@@ -225,8 +239,8 @@ function renderSidePanelInto() {
     onkeydown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); patch({ backdrop: b.id }); } },
   }, [document.createTextNode(b.name)]))));
 
-  panel.append(el('div', { class: 'sect-hd', text: 'EXTRAS' }));
-  panel.append(el('div', { class: 'opt-row' }, [
+  push(el('div', { class: 'sect-hd', text: 'EXTRAS' }));
+  push(el('div', { class: 'opt-row' }, [
     pet ? null : el('button', {
       class: `opt-btn${a.glasses ? ' active' : ''}`,
       text: '👓 Glasses',
@@ -239,8 +253,8 @@ function renderSidePanelInto() {
     }),
   ].filter(Boolean)));
 
-  panel.append(el('div', { class: 'sect-hd', text: 'PRESET' }));
-  panel.append(el('button', {
+  push(el('div', { class: 'sect-hd', text: 'PRESET' }));
+  push(el('button', {
     class: 'btn block', text: '🎲 Randomise',
     onclick: () => patch(pet ? {
       outfit: pick(OUTFITS),
@@ -254,13 +268,26 @@ function renderSidePanelInto() {
     }, 'New look'),
   }));
 
-  panel.append(el('div', {
+  push(el('div', {
     class: 'pane-sub',
     style: { marginTop: '12px', lineHeight: '1.7' },
     text: pet
       ? `${POSES.focus.length} focus and ${POSES.break.length} break poses, all reinterpreted for your ${petName(a).toLowerCase()}. The floating companion follows whichever you picked for the current kind of session.`
       : `${POSES.focus.length} focus and ${POSES.break.length} break poses. The floating avatar follows whichever you picked for the current kind of session.`,
   }));
+
+  return nodes;
+}
+
+export function avatarSidePanel(body) {
+  panel = body;
+  renderSidePanelInto();
+}
+
+function renderSidePanelInto() {
+  if (!panel) return;
+  panel.innerHTML = '';
+  for (const node of avatarCustomiser()) panel.append(node);
 }
 
 function swatchRow(colors, selected, onPick) {

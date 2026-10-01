@@ -58,7 +58,12 @@ async function enterApp() {
   $('#shell').hidden = false;
   wireRightPanel();
   startPresence();
-  await navigate('timer');
+  // Honour the deep link. navigate() writes the current section into the hash,
+  // so a reload — or a bookmark, or arriving back from a provider callback —
+  // has to come back to the section it was left on rather than always resetting
+  // to the timer. An unknown or absent hash falls through to the timer.
+  const wanted = location.hash.replace('#', '');
+  await navigate(SECTIONS[wanted] ? wanted : 'timer');
   await refreshStats();
   setInterval(refreshStats, 60_000);
 
@@ -276,12 +281,16 @@ let rpWired = false;
 function wireRightPanel() {
   if (rpWired) return;
   rpWired = true;
-  const shell = $('#shell');
   const collapse = $('#rp-collapse');
   const restore = $('#rp-restore');
 
   const apply = (collapsed) => {
-    shell.classList.toggle('rp-collapsed', collapsed);
+    // On <body>, not on #shell. The Spotify dock and the stats bar are
+    // siblings of #shell, so a class set on it could never reach them — which
+    // is why collapsing the panel used to leave both inset by the width of a
+    // panel that was no longer there. Setting the custom property on <body>
+    // cascades into the #shell grid and the two fixed bars alike.
+    document.body.classList.toggle('rp-collapsed', collapsed);
     restore.hidden = !collapsed;
     collapse.setAttribute('aria-expanded', String(!collapsed));
     try { localStorage.setItem(RP_KEY, collapsed ? '1' : '0'); } catch { /* private mode */ }
@@ -339,7 +348,7 @@ async function navigate(section) {
   // and the browser's Back button — or a swipe-back gesture on a phone —
   // walked back through the tab history and jumped to Friends for no visible
   // reason. replaceState keeps the deep link without the trap.
-  history.replaceState(null, '', `#${section}`);
+  history.replaceState({}, '', `#${section}`);
 }
 
 // ── floating avatar ──────────────────────────────────────────────────────
@@ -520,8 +529,12 @@ function reportSpotifyRedirect() {
   };
   const [message, ms] = messages[status] || [`Spotify: ${status}`, 3000];
   setTimeout(() => toast(message, ms), 400);
-  // Drop the query so a reload does not replay the message.
-  history.replaceState({}, '', location.pathname);
+  // Drop the marker so a reload does not replay it, but keep the hash: this
+  // replaces the whole URL with location.pathname, which used to throw away the
+  // section somebody was on and drop them back at the timer.
+  const clean = new URL(window.location.href);
+  clean.searchParams.delete('spotify');
+  history.replaceState({}, '', `${clean.pathname}${clean.search}${clean.hash}`);
 }
 
 // ── go ───────────────────────────────────────────────────────────────────

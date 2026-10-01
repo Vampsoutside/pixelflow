@@ -5,7 +5,7 @@ import {
   hashPassword, verifyPassword, setSessionCookie, clearSessionCookie,
   requireAuth, csrfToken, newState, verifyState,
 } from '../auth.js';
-import { getUser, log, consumeLoginState, DEFAULT_SETTINGS } from '../store.js';
+import { getUser, consumeLoginState, DEFAULT_SETTINGS } from '../store.js';
 import {
   PROVIDERS, isProvider, providerConfigured, availableProviders, redirectUri,
   authorizeUrl, exchangeCode, fetchProfile, STATE_TTL_MS,
@@ -62,7 +62,6 @@ router.post('/signup', async (req, res) => {
     await tag.run(id, 'Work', '#6bffda');
   });
 
-  await log(id, 'account', `Welcome to PixelFlow, ${username}!`);
   setSessionCookie(res, id);
   return res.json({ user: await getUser(id), csrfToken: csrfToken() });
 });
@@ -77,7 +76,6 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Wrong username or password.' });
   }
   setSessionCookie(res, row.id);
-  await log(row.id, 'account', 'Signed in');
   return res.json({ user: await getUser(row.id), csrfToken: csrfToken() });
 });
 
@@ -125,7 +123,6 @@ router.post('/guest', async (_req, res) => {
       await tag.run(id, 'Work', '#6bffda');
     });
 
-    await log(id, 'account', 'Started as a guest');
     setSessionCookie(res, id);
     return res.json({ user: await getUser(id), csrfToken: csrfToken() });
   }
@@ -161,7 +158,6 @@ router.post('/claim', requireAuth, async (req, res) => {
     'UPDATE users SET username = ?, email = ?, password_hash = ?, is_guest = 0 WHERE id = ?',
   ).run(username, email, hashPassword(password), user.id);
 
-  await log(user.id, 'account', `Created your account, ${username}`);
   return res.json({ user: await getUser(user.id), csrfToken: csrfToken() });
 });
 
@@ -341,14 +337,12 @@ router.get('/:provider/callback', async (req, res) => {
       await db.prepare(
         'INSERT INTO oauth_identities (user_id, provider, subject, email) VALUES (?,?,?,?)',
       ).run(row.link_user_id, provider, profile.subject, profile.email);
-      await log(row.link_user_id, 'account', `Connected your ${label} account`);
       setSessionCookie(res, Number(row.link_user_id));
       return res.redirect(`/?auth=linked&provider=${provider}`);
     }
 
     const { id, created } = await resolveUser(provider, profile);
     setSessionCookie(res, id);
-    await log(id, 'account', created ? `Joined PixelFlow with ${label}` : `Signed in with ${label}`);
     return res.redirect(`/?auth=${created ? 'welcome' : 'ok'}&provider=${provider}`);
   } catch (err) {
     console.error(`[auth] ${provider} sign-in failed:`, err.message);

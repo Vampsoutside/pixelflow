@@ -271,6 +271,15 @@ export async function migrate() {
       await db.exec('ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0');
     }
 
+    // Same story for the task archive: a completed task records when it was
+    // ticked so the Logs feed can order by it.
+    const taskColumns = new Set(
+      (await db.prepare('PRAGMA table_info(tasks)').all()).map((c) => c.name),
+    );
+    if (!taskColumns.has('done_at')) {
+      await db.exec('ALTER TABLE tasks ADD COLUMN done_at TEXT');
+    }
+
     migrationError = null;
   } catch (err) {
     migrationError = err.message;

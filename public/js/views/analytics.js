@@ -1,7 +1,7 @@
 import { el, minutes, minutesShort, dayKey, monthKey, addDays, toast } from '../ui.js';
-import { store, studyCache, fetchOverview, invalidateStudy, updateSetting } from '../store.js';
+import { store, studyCache, fetchOverview, fetchInsights, invalidateStudy, updateSetting } from '../store.js';
 import { api } from '../api.js';
-import { drawChart } from '../study/chart.js';
+import { drawChart, drawHeatmap, drawCumulative } from '../study/chart.js';
 
 let state = null;
 let host = null;
@@ -29,8 +29,14 @@ async function reload() {
   ]));
 
   let data;
+  let insights;
   try {
-    data = await fetchOverview({ month: state.month, mode: state.mode });
+    // Both reads cover the same month, so they are fetched together and the
+    // insights pane renders without a second round trip.
+    [data, insights] = await Promise.all([
+      fetchOverview({ month: state.month, mode: state.mode }),
+      fetchInsights({ month: state.month }),
+    ]);
   } catch (err) {
     host.innerHTML = '';
     host.append(el('div', { class: 'pane' }, [
@@ -41,7 +47,7 @@ async function reload() {
   }
 
   host.innerHTML = '';
-  host.append(todayPane(data), weekPane(data), monthPane(data));
+  host.append(todayPane(data), weekPane(data), monthPane(data), insightsPane(insights));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -389,6 +395,67 @@ function monthPane(data) {
 
   // Measured after the pane is in the document, so the SVG can size to it.
   queueMicrotask(() => drawChart(svgHost, data.chart, { height: 200 }));
+  return pane;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  INSIGHTS — consistency heatmap, cumulative race, per-tag split
+// ═══════════════════════════════════════════════════════════════════════════
+
+function insightsPane(insights) {
+  const heatHost = el('div', { class: 'heat-wrap' });
+  const cumulativeHost = el('div');
+  const byTag = insights.byTag || [];
+  const tagTotal = byTag.reduce((sum, t) => sum + t.minutes, 0);
+
+  const pane = el('div', { class: 'pane' }, [
+    el('div', { class: 'pane-hd' }, [
+      el('div', { class: 'pane-title', text: 'INSIGHTS' }),
+      el('div', { class: 'pane-sub', text: 'Twelve weeks of consistency, this month in total, and where the hours went.' }),
+    ]),
+
+    el('div', { class: 'sect-hd', text: 'DAILY CONSISTENCY' }),
+    el('div', { class: 'pane-sub', style: { marginBottom: '8px' }, text: `${insights.heatmap.from} → ${insights.heatmap.to}. Each square is one day.` }),
+    heatHost,
+
+    el('div', { class: 'sect-hd', style: { marginTop: '18px' }, text: 'CUMULATIVE PROGRESS' }),
+    el('div', { class: 'chart-legend' }, [
+      el('span', {}, [
+        el('i', { class: 'legend-swatch', style: { background: '#6bffda' } }),
+        document.createTextNode('Studied'),
+      ]),
+      el('span', {}, [
+        el('i', { class: 'legend-swatch', style: { background: '#ffb347' } }),
+        document.createTextNode('Planned'),
+      ]),
+    ]),
+    cumulativeHost,
+
+    el('div', { class: 'sect-hd', style: { marginTop: '18px' }, text: 'WHERE THE HOURS WENT' }),
+    byTag.length === 0
+      ? el('div', { class: 'empty', text: 'No tagged study entries this month. Pick a tag on an entry, or a focus tag in the timer, and it will show up here.' })
+      : el('div', { class: 'tag-stats' }, byTag.map((tag) => {
+        const share = tagTotal > 0 ? tag.minutes / tagTotal : 0;
+        return el('div', { class: 'tag-stat' }, [
+          el('div', { class: 'tag-stat-head' }, [
+            el('span', { class: 'tag-stat-name' }, [
+              el('i', { class: 'dot', style: { background: tag.color } }),
+              document.createTextNode(tag.name),
+            ]),
+            el('span', { class: 'tag-stat-val', text: `${minutesShort(tag.minutes)} · ${Math.round(share * 100)}%` }),
+          ]),
+          el('div', { class: 'bar', style: { height: '8px', borderRadius: '4px' } }, [
+            el('div', { class: 'bar-fill', style: { width: `${Math.max(2, share * 100)}%`, background: tag.color } }),
+          ]),
+        ]);
+      })),
+  ]);
+
+  // Measured after the pane is in the document, so the SVGs can size to it.
+  queueMicrotask(() => {
+    drawHeatmap(heatHost, insights.heatmap);
+    drawCumulative(cumulativeHost, insights.cumulative);
+  });
   return pane;
 }
 

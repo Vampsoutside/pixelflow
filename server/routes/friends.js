@@ -3,7 +3,7 @@ import { db } from '../db.js';
 import { requireAuth } from '../auth.js';
 import {
   getUser, findFriendship, acceptedFriendIds, upsertPresence, presenceFor,
-  minutesBetween, loggedDayKeys, pomodoroCount, log,
+  minutesBetween, loggedDayKeys, pomodoroCount,
 } from '../store.js';
 import { localDate } from '../db.js';
 import {
@@ -90,14 +90,12 @@ router.post('/request', async (req, res) => {
   if (existing) {
     // They already asked you, so this counts as accepting it.
     await db.prepare("UPDATE friendships SET status = 'accepted' WHERE id = ?").run(existing.id);
-    await log(req.user.id, 'friend', `You and ${other.username} are now friends`, { userId: target });
     return res.json({ status: 'friends' });
   }
 
   await db.prepare(
     "INSERT INTO friendships (requester_id, addressee_id, status) VALUES (?,?,'pending')",
   ).run(req.user.id, target);
-  await log(req.user.id, 'friend', `Friend request sent to ${other.username}`, { userId: target });
   return res.json({ status: 'outgoing' });
 });
 
@@ -113,10 +111,6 @@ router.post('/respond', async (req, res) => {
   } else {
     await db.prepare('DELETE FROM friendships WHERE id = ?').run(id);
   }
-  const other = await getUser(row.requester_id);
-  await log(req.user.id, 'friend',
-    accept ? `You and ${other?.username} are now friends` : `Declined ${other?.username}'s request`,
-    { userId: row.requester_id });
   return res.json({ status: accept ? 'friends' : 'none' });
 });
 

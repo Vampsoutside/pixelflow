@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS presence (
   last_seen_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
--- One row per user per day that they logged study minutes.
+-- One row per user per day that they logged study minutes. This is the daily
+-- rollup every chart, streak and the calendar read from.
 CREATE TABLE IF NOT EXISTS study_entries (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -55,6 +56,27 @@ CREATE TABLE IF NOT EXISTS study_entries (
   UNIQUE (user_id, date)
 );
 CREATE INDEX IF NOT EXISTS idx_study_entries_user_date ON study_entries(user_id, date);
+
+-- Append-only ledger of every change to a day's total, and the source of the
+-- study log feed. study_entries collapses a day to one number, which is what
+-- metrics need but is too lossy to show somebody what they actually did.
+--
+-- `minutes` is signed: negative means time was removed. The rows for a day sum
+-- to that day's total, with one deliberate exception — if the user lowers a
+-- day's total below what the timer already contributed, the rollup is kept
+-- authoritative and the ledger can read lower. study_entries always wins for
+-- every chart; this table is the journal beside it, never the source.
+CREATE TABLE IF NOT EXISTS study_log_entries (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date       TEXT    NOT NULL,
+  minutes    INTEGER NOT NULL,
+  source     TEXT    NOT NULL CHECK (source IN ('manual','timer')),
+  session_id INTEGER REFERENCES timer_sessions(id) ON DELETE SET NULL,
+  tag_id     INTEGER REFERENCES tags(id) ON DELETE SET NULL,
+  created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_study_log_user_date ON study_log_entries(user_id, date);
 
 -- The student's weekly plan. One row per weekday; `active` is the tick box.
 -- The weekly planned total is always the live SUM of the active rows and is
@@ -80,6 +102,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   text       TEXT    NOT NULL,
   done       INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0,1)),
+  -- When the task was ticked. A completed task leaves the Tasks window and
+  -- becomes an entry in the Logs archive, where Restore clears both columns.
+  done_at    TEXT,
   created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id, id DESC);
@@ -100,16 +125,26 @@ CREATE TABLE IF NOT EXISTS timer_sessions (
   kind         TEXT    NOT NULL DEFAULT 'focus' CHECK (kind IN ('focus','break'))
 );
 
--- Raw, append-only history feed rendered by the Logs tab.
-CREATE TABLE IF NOT EXISTS logs (
+-- Events and deadlines. Deliberately inert with respect to study totals: an
+-- item is a thing that happens on a day, not study time, so nothing here is
+-- ever summed into study_entries, study_plans, a streak or a chart.
+--
+-- 'deadline' is a day with no clock time; 'event' may carry one plus a length.
+CREATE TABLE IF NOT EXISTS events (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  kind       TEXT    NOT NULL,
-  message    TEXT    NOT NULL,
-  payload    TEXT    NOT NULL DEFAULT '{}',
+  date       TEXT    NOT NULL,
+  kind       TEXT    NOT NULL CHECK (kind IN ('event','deadline')),
+  title      TEXT    NOT NULL,
+  time       TEXT,
+  -- A duration for an event, a rough estimate for a deadline. Shown in the UI
+  -- and never added to any total.
+  minutes    INTEGER NOT NULL DEFAULT 0 CHECK (minutes >= 0),
+  tag_id     INTEGER REFERENCES tags(id) ON DELETE SET NULL,
+  done       INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0,1)),
   created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
-CREATE INDEX IF NOT EXISTS idx_logs_user ON logs(user_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_events_user_date ON events(user_id, date);
 
 CREATE TABLE IF NOT EXISTS spotify_tokens (
   user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

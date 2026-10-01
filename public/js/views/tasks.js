@@ -15,11 +15,16 @@ async function load() {
   if (panel) tasksSidePanel(panel);
 }
 
-/** AND = a task must carry every selected tag; OR = any one of them. */
+/**
+ * Only open tasks. A completed one is archived by the server and shows up in
+ * the Logs tab with a Restore button, so leaving it here as well would put the
+ * same thing in two places and make a mis-click look like a deletion.
+ */
 function visibleTasks() {
-  if (filter.selected.size === 0) return data.tasks;
+  const open = data.tasks.filter((task) => !task.done);
+  if (filter.selected.size === 0) return open;
   const ids = [...filter.selected];
-  return data.tasks.filter((task) => {
+  return open.filter((task) => {
     const own = task.tags.map((t) => t.id);
     return filter.mode === 'AND'
       ? ids.every((id) => own.includes(id))
@@ -66,10 +71,13 @@ function render() {
     },
   });
 
+  const open = data.tasks.filter((t) => !t.done).length;
+  const done = data.tasks.length - open;
+
   host.append(el('div', { class: 'pane' }, [
     el('div', { class: 'pane-hd' }, [
       el('div', { class: 'pane-title', text: 'TASKS' }),
-      el('div', { class: 'pane-sub', text: `${data.tasks.filter((t) => !t.done).length} open · ${data.tasks.filter((t) => t.done).length} done` }),
+      el('div', { class: 'pane-sub', text: `${open} open${done ? ` · ${done} in the log` : ''}` }),
     ]),
     el('div', { class: 'task-add-row' }, [
       input,
@@ -85,7 +93,7 @@ function render() {
         class: 'empty',
         text: data.tasks.length === 0
           ? 'No tasks yet. Add one above and give it a tag.'
-          : 'No tasks match these tags.',
+          : 'No open tasks match these tags.',
       })
       : null,
   ]));
@@ -128,15 +136,18 @@ function renderTagBar() {
 }
 
 function taskCard(task) {
-  const chk = el('div', { class: 'task-chk', text: task.done ? '✓' : '', role: 'checkbox', 'aria-checked': String(task.done) });
+  const chk = el('div', { class: 'task-chk', text: '', role: 'checkbox', 'aria-checked': String(false) });
   chk.addEventListener('click', async (event) => {
     event.stopPropagation();
     try {
-      await api.put(`/api/tasks/${task.id}`, { done: !task.done });
+      // Ticking is an archive, not a delete: the row stays in the database and
+      // Logs → LOG offers a one-click Restore, so a mis-click costs nothing.
+      await api.put(`/api/tasks/${task.id}`, { done: true });
       await load();
       onChange();
+      toast(`Archived to Logs — Restore it there if that was a slip`);
     } catch (err) {
-      toast(err.message || 'Could not update that task', 3000);
+      toast(err.message || 'Could not complete that task', 3000);
     }
   });
 
@@ -154,7 +165,7 @@ function taskCard(task) {
     },
   }, [el('i', { class: 'dot', style: { background: tag.color } }), document.createTextNode(tag.name)]));
 
-  const card = el('div', { class: `task-card${task.done ? ' done' : ''}` }, [
+  const card = el('div', { class: 'task-card' }, [
     chk,
     el('div', { class: 'task-main' }, [
       el('div', { class: 'task-txt', text: task.text }),

@@ -88,3 +88,24 @@ export async function fetchOverview({ month, mode } = {}) {
   studyCache.dirty = false;
   return overview;
 }
+
+/**
+ * The extra Analytics blocks: consistency heatmap, cumulative line and the
+ * per-tag split. Cached beside the overview because they are invalidated by
+ * exactly the same mutations — logging time, finishing a pomodoro, editing an
+ * entry in the Logs feed.
+ */
+const insightsCache = { key: null, value: null };
+
+export async function fetchInsights({ month } = {}) {
+  const params = new URLSearchParams();
+  if (month) params.set('month', month);
+  const key = params.toString();
+  if (!studyCache.dirty && insightsCache.key === key && insightsCache.value) {
+    return insightsCache.value;
+  }
+  const insights = await api.get(`/api/study/insights?${params}`);
+  insightsCache.key = key;
+  insightsCache.value = insights;
+  return insights;
+}
