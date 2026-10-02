@@ -248,9 +248,16 @@ export function drawHeatmap(host, series) {
   // Weekday labels live in the SVG, not in an HTML column beside it: the cell
   // size is computed here, so a parallel DOM column would drift out of
   // alignment the moment the pane got narrower.
-  ['Mon', 'Wed', 'Fri'].forEach((name, i) => {
+  //
+  // Every row is labelled. Drawing only Mon/Wed/Fri — the GitHub convention —
+  // left four of the seven rows unlabelled, so on a grid where only some cells
+  // are filled it read as though the other days were missing from the chart.
+  const LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  // Rows are spaced one full (cell + gap) apart; the earlier `i * 2` stepped
+  // two rows at a time, which only lined up because three labels were drawn.
+  LABELS.forEach((name, i) => {
     const label = svgEl('text', {
-      class: 'axis-text', x: leftPad - 7, y: i * 2 * (cell + gap) + cell / 2 + 3,
+      class: 'axis-text', x: leftPad - 7, y: i * (cell + gap) + cell / 2 + 3,
       'text-anchor': 'end',
     });
     label.textContent = name;

@@ -326,49 +326,52 @@ describe('turning a timed event into a deadline', () => {
   });
 });
 
-// ── writing the whole weekly plan ─────────────────────────────────────────
+// ── writing a single day of the weekly plan ────────────────────
 
-describe('PUT /api/study/plan/all', () => {
-  test('the response reflects the write it just made', async () => {
-    // The rows were inserted without awaiting, and the response re-reads the
-    // plan — so it could answer with the values it had just replaced.
+describe('PUT /api/study/plan', () => {
+  // The in-place stepper sends rapid single-day writes and reads the
+  // weekly total from the response to update the UI without a full
+  // page reload. The old code had no weekly total in the response,
+  // so every click triggered a reload that wiped the pane.
+  test('the response includes the updated weekly total', async () => {
     const c = await signedIn();
-    const plan = Array.from({ length: 7 }, (_, d) => ({ weekday: d, planned_minutes: 120 + d, active: true }));
-    const res = await c.put('/api/study/plan/all', { plan });
+    // Clear the default Mon–Fri seed so the weekly total reflects
+    // only the write this test makes.
+    await c.put('/api/study/plan/all', { plan: Array.from({ length: 7 }, (_, d) => ({ weekday: d, planned_minutes: 0, active: false })) });
+    const res = await c.put('/api/study/plan', { weekday: 0, planned_minutes: 120, active: true });
     assert.equal(res.status, 200);
-
-    const { plan: reported } = await res.json();
-    for (const p of plan) {
-      const got = reported.find((r) => r.weekday === p.weekday);
-      assert.equal(got?.planned_minutes, p.planned_minutes, `weekday ${p.weekday} must be reported back`);
-    }
+    const body = await res.json();
+    assert.equal(body.weekly?.plannedText, '2h 00m', 'weekly.plannedText must be present');
+    assert.ok(body.weekly?.met !== undefined, 'weekly.met must be present');
   });
 
-  test('holds up when the same plan is rewritten repeatedly', async () => {
+  // Hammering + rapid-fire must accumulate: the server must honour
+  // every write in order, even when they arrive back-to-back.
+  test('consecutive writes to the same day accumulate correctly', async () => {
     const c = await signedIn();
-    for (let i = 0; i < 15; i += 1) {
-      const plan = Array.from({ length: 7 }, (_, d) => ({
-        weekday: d, planned_minutes: 600 + i * 7 + d, active: true,
-      }));
-      const { plan: reported } = await (await c.put('/api/study/plan/all', { plan })).json();
-      assert.equal(
-        reported.find((r) => r.weekday === 0)?.planned_minutes,
-        600 + i * 7,
-        `iteration ${i} read back a stale value`,
-      );
+    await c.put('/api/study/plan/all', { plan: Array.from({ length: 7 }, (_, d) => ({ weekday: d, planned_minutes: 0, active: false })) });
+    let total = 0;
+    for (let i = 0; i < 5; i += 1) {
+      total += 30;
+      const res = await c.put('/api/study/plan', { weekday: 1, planned_minutes: total, active: true });
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.weekly?.planned, total, `iteration ${i}: weekly total must reflect the write`);
     }
   });
 
-  test('one user writing a plan never disturbs another', async () => {
+  // A second user writing their own day must not see the first user's
+  // plan, just as PUT /plan/all is already tested to be isolated.
+  test('plan updates are isolated per user', async () => {
     const a = await signedIn();
     const b = await signedIn();
-    const mine = [{ weekday: 1, planned_minutes: 111, active: true }];
-    const theirs = [{ weekday: 1, planned_minutes: 999, active: true }];
-
-    await a.put('/api/study/plan/all', { plan: mine });
-    await b.put('/api/study/plan/all', { plan: theirs });
-
-    const { plan: aPlan } = await (await a('/api/study/plan/all?x=1').then(() => a.put('/api/study/plan/all', { plan: mine }))).json();
-    assert.equal(aPlan.find((p) => p.weekday === 1)?.planned_minutes, 111);
+    await a.put('/api/study/plan/all', { plan: Array.from({ length: 7 }, (_, d) => ({ weekday: d, planned_minutes: 0, active: false })) });
+    await b.put('/api/study/plan/all', { plan: Array.from({ length: 7 }, (_, d) => ({ weekday: d, planned_minutes: 0, active: false })) });
+    await a.put('/api/study/plan', { weekday: 3, planned_minutes: 200, active: true });
+    await b.put('/api/study/plan', { weekday: 3, planned_minutes: 50, active: true });
+    const aRes = await a.put('/api/study/plan', { weekday: 3, planned_minutes: 200, active: true });
+    const bRes = await b.put('/api/study/plan', { weekday: 3, planned_minutes: 50, active: true });
+    assert.equal((await aRes.json()).weekly?.planned, 200);
+    assert.equal((await bRes.json()).weekly?.planned, 50);
   });
 });

@@ -1,6 +1,6 @@
 import { el, toast } from '../ui.js';
 import { store, saveProfile, avatar as currentAvatar } from '../store.js';
-import { drawPose, poseList, POSES, GRID } from '../avatar.js';
+import { drawPose, poseList, findPose, POSES, GRID } from '../avatar.js';
 import { PETS, isPet, petName } from '../pets.js';
 import { timer } from '../timer.js';
 
@@ -19,6 +19,13 @@ let host = null;
 let panel = null;
 let frame = 0;
 let ticker = null;
+/**
+ * A pose clicked but not yet reflected by the session, as {kind, id}.
+ *
+ * The stage follows the timer, so picking a break pose while the timer is idle
+ * had nowhere to show it. Set by poseButton and consumed by activePose.
+ */
+let preview = null;
 
 export const avatarSection = {
   mount(container, ctx = {}) {
@@ -33,7 +40,15 @@ export const avatarSection = {
       paintStage();
     }, 120);
   },
-  unmount() { clearInterval(ticker); },
+  unmount() {
+    clearInterval(ticker);
+    ticker = null;
+    // A preview belongs to the session that set it; leaving it behind would
+    // put a stale pose on the stage the next time the tab is opened.
+    preview = null;
+    host = null;
+    panel = null;
+  },
   sidePanel: avatarSidePanel,
 };
 
@@ -45,11 +60,40 @@ const stageCanvas = el('canvas', {
 
 function activePose() {
   const a = currentAvatar();
+  // While previewing, show exactly what was clicked. activePose() otherwise
+  // follows the session — break poses only while timer.isBreak — so with the
+  // timer idle the stage kept showing the focus pose after a break pose was
+  // picked, and clicking BREAK POSES looked like it did nothing. The preview
+  // is cleared once the real session kind takes over again.
+  if (preview && preview.kind && preview.kind !== (timer.isBreak ? 'break' : 'focus')) {
+    return preview.id;
+  }
+  preview = null;
   return timer.isBreak ? (a.breakPose || 'coffee') : (a.focusPose || 'desk');
+}
+
+/**
+ * What the stage is currently showing.
+ *
+ * A preview of the other kind wins over the session, and says so, because the
+ * stage is showing something the timer is not doing right now and the label
+ * should not imply otherwise.
+ */
+function stageLabel() {
+  const live = timer.isBreak ? 'break' : 'focus';
+  if (preview && preview.kind && preview.kind !== live) {
+    const pose = findPose(preview.kind, preview.id);
+    return `PREVIEW · ${pose.name.toUpperCase()}`;
+  }
+  return timer.isBreak ? 'ON BREAK' : 'FOCUSING';
 }
 
 function paintStage() {
   drawPose(stageCanvas, currentAvatar(), activePose(), frame);
+  // activePose() may have just discarded a stale preview, so keep the caption
+  // in step with whatever the canvas ended up showing.
+  const label = host?.querySelector('.ava-stage-label');
+  if (label) label.textContent = stageLabel();
 }
 
 function render() {
@@ -63,7 +107,7 @@ function render() {
     el('div', { class: 'ava-layout' }, [
       el('div', { class: 'ava-stage' }, [
         stageCanvas,
-        el('div', { class: 'ava-stage-label', text: timer.isBreak ? 'ON BREAK' : 'FOCUSING' }),
+        el('div', { class: 'ava-stage-label', text: stageLabel() }),
         el('div', { class: 'ava-stage-sub', text: pet
           ? `Your ${petName(currentAvatar()).toLowerCase()} floats over the timer.`
           : 'The same avatar floats over the timer.' }),
@@ -106,6 +150,10 @@ function poseButton(kind, pose) {
     'aria-pressed': String(selected),
     onclick: async () => {
       await saveProfile({ avatar: { ...currentAvatar(), [kind === 'break' ? 'breakPose' : 'focusPose']: pose.id } });
+      // Show it on the stage straight away. The stage follows the timer, so
+      // without this a break pose picked while idle was saved correctly but
+      // never appeared anywhere on screen.
+      preview = { kind, id: pose.id };
       render();
       renderSidePanelInto();
       toast(`${pose.name} pose selected`);

@@ -39,26 +39,47 @@ export const friendsSection = {
   async mount(container, ctx = {}) {
     host = container;
     onChange = ctx.onChange || (() => {});
+    // Re-entering the tab starts from a clean slate: a previous mount may have
+    // been torn down mid-flight, and the sub-tab it had selected is not a
+    // meaningful default for a fresh visit.
+    subTab = 'friends';
     await load();
     // Polling keeps the online dots and "studying now" lines current.
     clearInterval(poll);
     poll = setInterval(() => load({ silent: true }), 10000);
   },
-  unmount() { clearInterval(poll); },
+  // Clearing the interval is the point of this, but dropping `host` and
+  // `panel` matters just as much: a poll already in flight resolves after
+  // unmount, and with a stale host it would paint into the section that took
+  // this one's place. `mounted` makes that a no-op.
+  unmount() {
+    clearInterval(poll);
+    poll = null;
+    host = null;
+    panel = null;
+    mounted = false;
+  },
   reload: load,
   sidePanel: friendsSidePanel,
 };
 
+let mounted = false;
+
 async function load({ silent = false } = {}) {
   if (!host) return;
-  if (!silent) host.innerHTML = '';
+  if (!silent) mounted = true;
   let data;
   try {
     data = await api.get('/api/friends');
   } catch (err) {
-    if (!silent) host.append(el('div', { class: 'pane' }, [el('div', { class: 'empty', text: err.message || 'Could not load friends.' })]));
+    if (!host || !silent) {
+      host?.append(el('div', { class: 'pane' }, [el('div', { class: 'empty', text: err.message || 'Could not load friends.' })]));
+    }
     return;
   }
+
+  // The tab may have been left while that request was in flight.
+  if (!host || !mounted) return;
 
   host.innerHTML = '';
   host.append(tabsRow(data));

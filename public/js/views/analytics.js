@@ -199,6 +199,22 @@ function weekPane(data) {
   const week = data.week;
   const todayKey = dayKey();
 
+  // The +/- steppers must not go through reload(). That wiped the pane to a
+  // skeleton, refetched the month and rebuilt every chart, so each click threw
+  // away the scroll position and re-rendered the whole view — which is what
+  // "it refreshes the page for each +" looked like. The server already returns
+  // the new weekly total in the PUT response, so the stepper updates in place
+  // and one quiet reload reconciles everything else afterwards.
+  let reconcile = null;
+  const scheduleReconcile = () => {
+    clearTimeout(reconcile);
+    reconcile = setTimeout(() => { invalidateStudy(); reload(); }, 700);
+  };
+
+  // One element, shared by every row and the summary below, so stepping a day
+  // never has to re-render the pane to move the total.
+  const totalNum = el('div', { class: 'week-total-num', text: week.plannedText });
+
   const rows = data.planGrid.map((day) => {
     const isToday = day.date === todayKey;
     const fill = day.planned > 0
@@ -206,17 +222,9 @@ function weekPane(data) {
       : '';
     const barWidth = day.planned > 0 ? Math.min(100, (day.studied / day.planned) * 100) : 0;
 
-    async function patch(changes) {
-      try {
-        await api.put('/api/study/plan', { weekday: day.weekday, ...changes });
-        invalidateStudy();
-        await reload();
-        window.dispatchEvent(new CustomEvent('pixelflow:stats'));
-      } catch (err) {
-        toast(err.message || 'Could not update the plan', 3000);
-      }
-    }
-
+    // Painted locally the instant a click lands, so the number under the
+    // cursor moves immediately even before the network answers.
+    const plannedLabel = el('div', { class: 'stepper-val', text: day.active ? hours(day.planned) : '—' });
     const tick = el('div', {
       class: 'plan-tick',
       role: 'checkbox',
@@ -225,7 +233,65 @@ function weekPane(data) {
       'aria-label': `Plan to study on ${day.label}`,
       text: day.active ? '✓' : '',
     });
-    const toggleDay = () => patch({ active: !day.active });
+
+    // Optimistic state for this row, so rapid clicks accumulate instead of
+    // fighting over the stale server value.
+    let planned = day.planned;
+    let active = day.active;
+
+    function paintOptimistic() {
+      tick.textContent = active ? '✓' : '';
+      tick.setAttribute('aria-checked', String(active));
+      plannedLabel.textContent = active ? hours(planned) : '—';
+      const row = tick.closest('.plan-row');
+      row?.classList.toggle('active', active);
+      row?.classList.toggle('rest', !active);
+      // Keep the weekly total honest while stepping — it is the number people
+      // watch when adjusting several days in a row.
+      let sum = 0;
+      for (const d of data.planGrid) {
+        if (d.date === day.date) sum += active ? planned : 0;
+        else if (d.active) sum += d.planned;
+      }
+      totalNum.textContent = minutes(sum);
+    }
+
+    // One request at a time per row, with clicks that landed mid-flight queued
+    // behind it, so hammering + cannot reorder the writes.
+    let inFlight = false;
+    let queued = null;
+
+    async function patch(changes) {
+      queued = { ...(queued || {}), ...changes };
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        while (queued) {
+          const body = { weekday: day.weekday, ...queued };
+          queued = null;
+          const res = await api.put('/api/study/plan', body);
+          // Adopt the server's values so the stepper follows the real state.
+          if (typeof res.minutes === 'number') planned = res.minutes;
+          if (typeof res.active === 'boolean') active = res.active;
+          paintOptimistic();
+          if (res.weekly?.plannedText) totalNum.textContent = res.weekly.plannedText;
+        }
+        window.dispatchEvent(new CustomEvent('pixelflow:stats'));
+        scheduleReconcile();
+      } catch (err) {
+        toast(err.message || 'Could not update the plan', 3000);
+        invalidateStudy();
+        await reload();
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    const toggleDay = () => {
+      active = !active;
+      paintOptimistic();
+      patch({ active });
+    };
     tick.addEventListener('click', toggleDay);
     tick.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleDay(); }
@@ -249,12 +315,22 @@ function weekPane(data) {
         el('div', { class: 'stepper' }, [
           el('button', {
             text: '−', 'aria-label': `Less planned time on ${day.label}`,
-            onclick: () => patch({ planned_minutes: Math.max(0, day.planned - 30), active: true }),
+            onclick: () => {
+              planned = Math.max(0, planned - 30);
+              active = true;
+              paintOptimistic();
+              patch({ planned_minutes: planned, active: true });
+            },
           }),
-          el('div', { class: 'stepper-val', text: day.active ? hours(day.planned) : '—' }),
+          plannedLabel,
           el('button', {
             text: '+', 'aria-label': `More planned time on ${day.label}`,
-            onclick: () => patch({ planned_minutes: day.planned + 30, active: true }),
+            onclick: () => {
+              planned += 30;
+              active = true;
+              paintOptimistic();
+              patch({ planned_minutes: planned, active: true });
+            },
           }),
         ]),
       ]),
@@ -272,7 +348,7 @@ function weekPane(data) {
     ]),
     el('div', { class: 'week-total' }, [
       el('div', { style: { minWidth: '92px' } }, [
-        el('div', { class: 'week-total-num', text: week.plannedText }),
+        totalNum,
         el('div', { class: 'pane-sub', text: 'planned' }),
       ]),
       el('div', { style: { flex: '1' } }, [

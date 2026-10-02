@@ -28,6 +28,8 @@ const SECTIONS = {
 
 let current = 'timer';
 let onStats = () => {};
+/** Bumped per navigation so a slow mount cannot paint over a newer one. */
+let navToken = 0;
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  BOOT
@@ -307,6 +309,23 @@ function wireRightPanel() {
 
 async function navigate(section) {
   if (!SECTIONS[section]) return;
+
+  // Tear the previous section down before the next one mounts. Several views
+  // hold live resources in unmount() — Friends polls /api/friends every 10s,
+  // Avatar animates on a 120ms ticker, Tasks drops its panel reference — and
+  // without this they outlived the tab. The Friends poll then fired into
+  // whatever host the *next* section had mounted, replacing the Settings
+  // sidebar with "FIND PEOPLE", which is where the intermittent tracebacks
+  // and the phantom jumps came from.
+  const previous = SECTIONS[current];
+  if (previous && previous !== SECTIONS[section]) {
+    try { previous.view.unmount?.(); } catch { /* a broken teardown must not block navigation */ }
+  }
+
+  // A slow mount can still be in flight when the next click lands. Whichever
+  // finishes last wins the DOM, so stamp the section we are mounting and let
+  // the losers bail rather than paint over a newer view.
+  const token = ++navToken;
   current = section;
 
   $$('#sidebar .sb-btn[data-section]').forEach((btn) => {
@@ -336,11 +355,15 @@ async function navigate(section) {
       onChange: () => { refreshStats(); },
     });
   } catch (err) {
+    // A newer navigation already happened while this one was loading; its
+    // error is stale and must not overwrite the section now on screen.
+    if (token !== navToken) return;
     host.append(el('div', { class: 'pane' }, [
       el('div', { class: 'empty', text: err.message || 'This section failed to load.' }),
       el('button', { class: 'btn block', text: 'Reload section', style: { marginTop: '12px' }, onclick: () => navigate(section) }),
     ]));
     console.error(`[pixelflow] ${section} failed to mount`, err);
+    return;
   }
 
   // Reflect the section in the URL without pushing a history entry per tab.
@@ -359,6 +382,29 @@ function wireAvatarChrome() {
   const wrap = document.getElementById('ava-wrap');
   const canvas = document.getElementById('ava-canvas');
   const resize = document.getElementById('ava-resize');
+  const minimize = document.getElementById('ava-minimize');
+  const expand = document.getElementById('ava-expand');
+
+  const setCollapsed = (collapsed) => {
+    wrap.classList.toggle('min', collapsed);
+    // The resize handler writes inline width/height; clear them so the CSS
+    // collapsed size (#ava-wrap.min #ava-canvas) actually applies.
+    if (collapsed) { canvas.style.width = ''; canvas.style.height = ''; }
+  };
+
+  // Clicking the minimise button shrinks the avatar to a tiny pixel square;
+  // the expand button on its right restores it. State is purely local and
+  // never touches the server, so it survives a session only as the default.
+  minimize.addEventListener('click', () => {
+    minimize.setAttribute('aria-pressed', 'true');
+    expand.style.display = 'block';
+    setCollapsed(true);
+  });
+  expand.addEventListener('click', () => {
+    expand.style.display = 'none';
+    minimize.setAttribute('aria-pressed', 'false');
+    setCollapsed(false);
+  });
 
   // Drag
   let dragging = false;

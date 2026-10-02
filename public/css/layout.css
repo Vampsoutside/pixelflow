@@ -99,6 +99,23 @@
   cursor: se-resize; display: flex; align-items: center; justify-content: center;
   font-size: 9px; color: var(--muted);
 }
+#ava-minimize {
+  position: absolute; bottom: 14px; right: 28px;
+  width: 14px; height: 14px; border-radius: 3px;
+  background: var(--surface3); border: 1px solid var(--border2);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--muted);
+  transition: opacity .2s;
+}
+#ava-minimize:hover { background: var(--surface4); }
+#ava-minimize[aria-pressed="true"] { opacity: var(--opacity-hover); }
+/* Collapsed: shrink the canvas to a 8px-wide pixel square, hide the chrome.
+   Clicking the same button again restores the full avatar. */
+#ava-wrap.min #ava-canvas { width: 8px; height: 10px; }
+#ava-wrap.min .ava-name-tag,
+#ava-wrap.min #ava-resize,
+#ava-wrap.min #ava-minimize { display: none; }
+#ava-wrap.min #ava-expand { display: block; }
 
 /* ── RIGHT PANEL ─────────────────────────────────────────────────────── */
 
