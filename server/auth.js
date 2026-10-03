@@ -33,7 +33,47 @@ export function verifyPassword(password, stored) {
 // ── JWT (HS256) ──────────────────────────────────────────────────────────
 // Hand-rolled on node:crypto so the app keeps a single runtime dependency.
 
-const secret = () => process.env.JWT_SECRET || 'pixelflow-dev-secret-do-not-use-in-production';
+/**
+ * The HMAC key sessions are signed with.
+ *
+ * There used to be a literal fallback here — 'pixelflow-dev-secret-…' — so a
+ * deployment that forgot JWT_SECRET still booted, and served happily: anyone
+ * who had read the source could mint a token for any user id and be accepted.
+ * The name says "do not use in production", which is not a control.
+ *
+ * So the fallback now exists only when running outside a production deployment,
+ * where a laptop with no .env still works. Under NODE_ENV=production an unset
+ * JWT_SECRET is fatal at boot rather than quietly insecure. The generated value
+ * is per-process and random, so even a non-production run does not share a key
+ * with anything else.
+ */
+function secret() {
+  const configured = process.env.JWT_SECRET;
+  if (configured) return configured;
+
+  const production = process.env.NODE_ENV === 'production'
+    || process.env.VERCEL === '1'
+    || process.env.VERCEL_ENV === 'production';
+  if (production) {
+    throw new Error(
+      'JWT_SECRET is not set. Refusing to start: without it every session could '
+      + 'be forged. Set a long random value in the environment (see .env.example).',
+    );
+  }
+  // Local development only. Random per process so two dev servers cannot mint
+  // each other's tokens, and so nothing here is a known constant.
+  return randomBytes(32).toString('hex');
+}
+
+// Checked at import time, not lazily. secret() is only called when a token is
+// signed or read, so a production deploy with no JWT_SECRET would otherwise
+// start, answer /api/health, and serve static assets happily — then throw on
+// the first login, by which point the failure looks like an outage rather than
+// a misconfiguration. Importing this module is part of booting the app, so the
+// throw lands before the listener is up.
+if (process.env.NODE_ENV === 'production' || process.env.VERCEL === '1') {
+  secret();
+}
 
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
 

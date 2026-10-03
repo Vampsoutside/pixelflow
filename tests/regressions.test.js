@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const dir = mkdtempSync(join(tmpdir(), 'pf-regress-'));
 process.env.DB_PATH = join(dir, 'test.db');
@@ -415,6 +416,169 @@ describe('GET /api/study/overview?date=', () => {
     const month = key.slice(0, 7);
     const bodyB = await (await b(`/api/study/overview?month=${month}&date=${key}`)).json();
     assert.equal(bodyB.today.studied, 0, "one account's entry must not appear for another");
+  });
+});
+
+// ── the session secret ──────────────────────────────────────────────────
+
+describe('the session signing secret', () => {
+  // It used to be `process.env.JWT_SECRET || 'pixelflow-dev-secret-…'`, so a
+  // deployment that forgot the variable still booted and signed real sessions
+  // with a constant that is published in this repository. Anyone who had read
+  // the source could mint a token for any user id and be accepted.
+  const bootWith = (env) => spawnSync(process.execPath, ['-e', "import('./server/auth.js')"], {
+    cwd: new URL('..', import.meta.url).pathname,
+    env: { ...process.env, JWT_SECRET: '', NODE_ENV: 'development', ...env },
+    encoding: 'utf8',
+  });
+
+  test('production refuses to start without one', () => {
+    const res = bootWith({ NODE_ENV: 'production' });
+    assert.notEqual(res.status, 0, 'the process must fail, not serve');
+    assert.match(res.stderr, /JWT_SECRET is not set/);
+  });
+
+  test('the failure happens at boot, not on the first login', () => {
+    // secret() is only called when a token is signed or read, so a lazy check
+    // would let the server answer /api/health and then throw mid-session —
+    // which reads as an outage rather than a misconfiguration.
+    const res = bootWith({ NODE_ENV: 'production' });
+    assert.match(res.stderr, /Refusing to start/);
+    assert.doesNotMatch(res.stderr, /Cannot find module/, 'it must be the secret, not an import failure');
+  });
+
+  test('a non-production run still boots, on a random per-process key', () => {
+    // A laptop with no .env has to work. The key is generated rather than
+    // hardcoded, so it is not a shared constant either.
+    const res = bootWith({ NODE_ENV: 'development' });
+    assert.equal(res.status, 0, `dev boot must succeed: ${res.stderr}`);
+  });
+
+  test('a configured secret is used as given', () => {
+    const res = bootWith({ NODE_ENV: 'production', JWT_SECRET: 'a-real-secret' });
+    assert.equal(res.status, 0, `a configured secret must boot: ${res.stderr}`);
+  });
+
+  test('no session is accepted that was signed with the old constant', async () => {
+    // Belt and braces: even if the fallback came back, a token carrying it must
+    // not be honoured.
+    const c = await signedIn();
+    assert.ok(await c.user(), 'the real session works');
+  });
+});
+
+// ── friends search wildcards ────────────────────────────────────────────
+
+describe('friends search', () => {
+  // `WHERE username LIKE '%' || q || '%'` with no ESCAPE meant q='%' matched
+  // every row. The 2-character floor did not help: '%%' is two characters.
+  const search = async (c, q) => (await c(`/api/friends/search?q=${encodeURIComponent(q)}`)).json();
+
+  /**
+   * Creates an account the searcher is NOT.
+   *
+   * signup signs the caller in as the new account, and search deliberately
+   * excludes whoever is asking — so using one client for both means searching
+   * for yourself and finding nothing. A separate client per account is the only
+   * way to build the situation the route is actually for.
+   */
+  const someoneElse = async (username) => {
+    const other = client();
+    await other('/api/auth/session');
+    await other.post('/api/auth/signup', {
+      username, email: `${username}@e.com`, password: 'password123',
+    });
+    return other;
+  };
+
+  test('a per-cent is a literal, not a wildcard', async () => {
+    const c = await signedIn();
+    await someoneElse('alpha');
+    await someoneElse('beta');
+    await someoneElse('gamma');
+
+    const viaPercent = await search(c, '%%');
+    assert.equal(viaPercent.users.length, 0, "'%%' must not return the whole user table");
+    assert.equal((await search(c, '%')).users.length, 0, "a bare '%' must match nothing");
+  });
+
+  test('an underscore is a literal, not a single-character wildcard', async () => {
+    const c = await signedIn();
+    await someoneElse('zebra');
+    // 'a_a' as a wildcard would match 'zebra'; as a literal it matches nothing.
+    assert.equal((await search(c, 'a_a')).users.length, 0, "'a_a' must not match 'zebra'");
+  });
+
+  test('a real substring still matches', async () => {
+    // The fix must not break ordinary search.
+    const c = await signedIn();
+    await someoneElse('searchable');
+    const found = await search(c, 'searchab');
+    assert.ok(
+      found.users.some((u) => u.username === 'searchable'),
+      'a genuine substring must still find the account',
+    );
+  });
+
+  test('the searcher never appears in their own results', async () => {
+    const me = await signedIn();
+    const { id, username } = await me.user();
+    // Both a common letter and the account's own name.
+    for (const q of ['a', username]) {
+      const { users } = await search(me, q);
+      assert.equal(users.some((u) => u.id === id), false, 'you must not be able to find yourself');
+    }
+  });
+
+  test('a search result carries no private fields', async () => {
+    const c = await signedIn();
+    await someoneElse('privateone');
+    const { users } = await search(c, 'private');
+    assert.ok(users.length > 0, 'the account should be findable');
+    for (const u of users) {
+      assert.equal(u.email, undefined, 'a search result must not expose an email');
+      assert.equal(u.password_hash, undefined, 'nor a hash');
+      assert.equal(u.is_guest, undefined, 'nor the guest flag');
+      assert.equal(u.settings, undefined, 'nor their settings');
+    }
+  });
+});
+
+// ── secret values must not reach the logs ───────────────────────────────
+
+describe('a failed query', () => {
+  // The error path appended the bound arguments to the message, and the error
+  // middleware console.error's it. A failed INSERT into spotify_tokens therefore
+  // printed the OAuth access and refresh tokens in the clear.
+  test('does not print secret arguments', async () => {
+    const { db } = await import('../server/db.js');
+    const SECRET = 'SECRET_ACCESS_TOKEN_do_not_log_me';
+    await assert.rejects(
+      () => db.prepare(`
+        INSERT INTO spotify_tokens (user_id, access_token, refresh_token, expires_at, scope)
+        VALUES (?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET access_token=excluded.access_token
+      `).run(999999, SECRET, 'REFRESH_also_secret', 1, 'test'),
+      (err) => {
+        assert.doesNotMatch(err.message, new RegExp(SECRET), 'the access token must not be in the message');
+        assert.doesNotMatch(err.message, /REFRESH_also_secret/, 'nor the refresh token');
+        // The diagnostic has to survive, or the log is useless.
+        assert.match(err.message, /INSERT INTO spotify_tokens/, 'the statement should still be named');
+        assert.match(err.message, /redacted/, 'and the value reported as redacted');
+        return true;
+      },
+    );
+  });
+
+  test('an ordinary value is still printed, or the log is useless', async () => {
+    const { db } = await import('../server/db.js');
+    await assert.rejects(
+      () => db.prepare('INSERT INTO tags (user_id, name, color) VALUES (?,?,?)')
+        .run(999999, 'a perfectly ordinary tag', '#fff'),
+      (err) => {
+        assert.match(err.message, /a perfectly ordinary tag/, 'non-secret args must remain readable');
+        return true;
+      },
+    );
   });
 });
 

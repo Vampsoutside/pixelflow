@@ -1,17 +1,26 @@
 import { asyncRouter } from '../http.js';
-import { db } from '../db.js';
+import { db, localDate } from '../db.js';
 import { requireAuth } from '../auth.js';
 import {
   getUser, findFriendship, acceptedFriendIds, upsertPresence, presenceFor,
   minutesBetween, loggedDayKeys, pomodoroCount,
 } from '../store.js';
-import { localDate } from '../db.js';
 import {
   dayKey, addDays, weekStart, planIndex, weekTotals, streakFromDays, formatMinutes,
 } from '../metrics.js';
 
 const router = asyncRouter();
 router.use(requireAuth);
+
+/**
+ * Escapes the characters LIKE treats as wildcards.
+ *
+ * Paired with `ESCAPE '\'` in the query below, so a search is a substring match
+ * on what was actually typed. '%' and '_' are the wildcards; the escape
+ * character itself has to be escaped first or it would escape whatever
+ * followed it.
+ */
+const likeEscape = (text) => String(text).replace(/[\\%_]/g, (ch) => `\\${ch}`);
 
 /** The public shape of a friend row, built from real server-side data. */
 async function friendCard(friendId, viewerId) {
@@ -55,11 +64,17 @@ router.get('/search', async (req, res) => {
   const q = String(req.query.q || '').trim();
   if (q.length < 2) return res.json({ users: [] });
 
+  // Escape the LIKE wildcards before wrapping the query, so a search for '%'
+  // looks for a literal per-cent sign instead of matching every row. Without
+  // this, '%%' is two characters — long enough to clear the floor above — and
+  // returned the whole user table.
+  const pattern = `%${likeEscape(q)}%`;
+
   const rows = await db.prepare(`
     SELECT id, username FROM users
-    WHERE username LIKE ? AND id <> ?
+    WHERE username LIKE ? ESCAPE '\\' AND id <> ?
     ORDER BY username COLLATE NOCASE LIMIT 20
-  `).all(`%${q}%`, req.user.id);
+  `).all(pattern, req.user.id);
 
   res.json({
     users: await Promise.all(rows.map(async (r) => {

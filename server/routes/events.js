@@ -1,5 +1,5 @@
 import { asyncRouter } from '../http.js';
-import { db } from '../db.js';
+import { db, localDate } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { eventsBetween } from '../store.js';
 import { parseDay, dayKey } from '../metrics.js';
@@ -90,7 +90,10 @@ router.get('/', async (req, res) => {
   }
   const { from, to } = month
     ? monthBounds(month)
-    : monthBounds(new Date().toISOString().slice(0, 7));
+    // localDate, not toISOString: the app treats study and calendar days as
+    // local dates everywhere else, so toISOString() showed the previous month
+    // for anyone east of Greenwich during the first hours of the 1st.
+    : monthBounds(localDate().slice(0, 7));
 
   return res.json({ events: await eventsBetween(req.user.id, from, to) });
 });

@@ -82,6 +82,29 @@ export const dbIsEphemeral = !target.remote
   && !dbPath.startsWith(process.cwd());
 
 /**
+ * Column names whose values must never reach a log.
+ *
+ * The error path below appends the bound arguments to the message, and that
+ * message is console.error'd by the error middleware. A failed INSERT against
+ * spotify_tokens therefore printed the user's OAuth access and refresh tokens,
+ * in the clear, to whatever collects stderr. Naming the shape instead of the
+ * value keeps the diagnostic (which column, which position) without the secret.
+ */
+const SECRET_COLUMNS = /token|password|secret|hash|salt|code|nonce|state|refresh|access/i;
+
+/**
+ * A readable stand-in for a bound value: secrets become a marker, everything
+ * else is printed as-is because it is what makes the error diagnosable.
+ */
+function safeArg(value, sql) {
+  if (typeof value !== 'string') return value;
+  // Only redact when the *statement* is about secrets, so an ordinary text
+  // column that happens to contain the word "token" is still readable.
+  if (!SECRET_COLUMNS.test(sql)) return value;
+  return `<${value.length} chars redacted>`;
+}
+
+/**
  * A prepared statement.
  *
  * libSQL exposes one entry point — execute({ sql, args }) — so this holds the
@@ -102,7 +125,8 @@ class Statement {
     } catch (err) {
       // node:sqlite accepted odd bindings silently; libSQL throws. Naming the
       // statement and its arguments turns "some query failed" into a fix.
-      err.message = `${err.message}\n  SQL: ${this.sql.replace(/\s+/g, ' ').trim()}\n  args: ${JSON.stringify(args)}`;
+      const shown = args.map((value) => safeArg(value, this.sql));
+      err.message = `${err.message}\n  SQL: ${this.sql.replace(/\s+/g, ' ').trim()}\n  args: ${JSON.stringify(shown)}`;
       throw err;
     }
   }
