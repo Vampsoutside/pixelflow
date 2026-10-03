@@ -459,6 +459,22 @@ describe('the session signing secret', () => {
     assert.equal(res.status, 0, `a configured secret must boot: ${res.stderr}`);
   });
 
+  // Every deployment marker, not just NODE_ENV. The first version of this guard
+  // checked NODE_ENV and VERCEL=1 only, so a deploy that identified itself by
+  // VERCEL_ENV booted with the development fallback — the exact failure the
+  // guard exists to prevent, one variable away.
+  for (const [label, env] of [
+    ['NODE_ENV=production', { NODE_ENV: 'production' }],
+    ['VERCEL=1', { VERCEL: '1' }],
+    ['VERCEL_ENV=production', { VERCEL_ENV: 'production' }],
+  ]) {
+    test(`${label} is refused without a secret`, () => {
+      const res = bootWith(env);
+      assert.notEqual(res.status, 0, `${label} must not boot without JWT_SECRET`);
+      assert.match(res.stderr, /JWT_SECRET is not set/);
+    });
+  }
+
   test('no session is accepted that was signed with the old constant', async () => {
     // Belt and braces: even if the fallback came back, a token carrying it must
     // not be honoured.
@@ -632,6 +648,145 @@ describe('rejecting an impossible weekday', () => {
     const res = await c.put('/api/study/plan', { weekday: 2, planned_minutes: -90, active: true });
     assert.equal(res.status, 200);
     assert.equal((await res.json()).minutes, 0, 'a negative plan is zero, not a credit');
+  });
+});
+
+// ── friendship consent ─────────────────────────────────────────────────
+
+describe('asking someone to be friends', () => {
+  // findFriendship matches the pair in EITHER direction, so the branch that
+  // accepts an existing pending request used to fire on your own outstanding
+  // request: replaying /request befriended someone who never agreed, and emptied
+  // their pending list so they never even saw the ask.
+  const pair = async () => {
+    const A = client();
+    await A.post('/api/auth/signup', { username: uniq(), email: `${uniq()}@a.example.com`, password: 'password123' });
+    const B = client();
+    await B.post('/api/auth/signup', { username: uniq(), email: `${uniq()}@b.example.com`, password: 'password123' });
+    return { A, B, ida: (await A.user()).id, idb: (await B.user()).id };
+  };
+  const friendsOf = async (c) => (await (await c('/api/friends')).json()).friends.map((f) => f.username);
+  const requestsOf = async (c) => (await (await c('/api/friends')).json()).requests.map((r) => r.username);
+
+  test('replaying your own request does not befriend them', async () => {
+    const { A, B, idb } = await pair();
+    const before = await friendsOf(B);
+
+    const first = await A.post('/api/friends/request', { userId: idb });
+    assert.equal(first.status, 200);
+    assert.equal((await first.json()).status, 'outgoing');
+
+    const replay = await A.post('/api/friends/request', { userId: idb });
+    assert.notEqual(replay.status, 200, 'a replay must not report success');
+    assert.equal((await replay.json()).status, undefined);
+
+    assert.deepEqual(await friendsOf(B), before, 'B must not gain a friend who never accepted');
+  });
+
+  test('the pending request is still there for B to answer', async () => {
+    // The bypass also emptied the addressee's pending list, so they never saw
+    // the ask at all.
+    const { A, B, idb } = await pair();
+    const name = (await A.user()).username;
+    await A.post('/api/friends/request', { userId: idb });
+    await A.post('/api/friends/request', { userId: idb });
+    assert.ok(
+      (await requestsOf(B)).includes(name),
+      'B must still be able to see and answer the request',
+    );
+  });
+
+  test('answering somebody who asked YOU still works', async () => {
+    // The fix must not break the legitimate path this branch was written for.
+    const { A, B, ida, idb } = await pair();
+    const name = (await B.user()).username;
+    await B.post('/api/friends/request', { userId: ida });
+    // A now sends its own request, which is really an acceptance of B's.
+    const res = await A.post('/api/friends/request', { userId: idb });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).status, 'friends');
+    assert.ok((await friendsOf(A)).includes(name));
+  });
+
+  test('asking someone already accepted is a conflict', async () => {
+    const { A, B, ida, idb } = await pair();
+    await B.post('/api/friends/request', { userId: ida });
+    await A.post('/api/friends/request', { userId: idb });
+    // They are friends now; a further request must not create a second row.
+    const again = await A.post('/api/friends/request', { userId: idb });
+    assert.equal(again.status, 409, 'an existing friendship is a conflict');
+  });
+});
+
+// ── unbounded and mistyped input ────────────────────────────────────────
+
+describe('a finished pomodoro', () => {
+  // focus_seconds had no upper bound, while /entry already caps at 1440
+  // minutes. A client sending 999999 logged 16,666,666 minutes.
+  test('cannot exceed a day', async () => {
+    const c = await signedIn();
+    const res = await c.post('/api/study/sessions', { focus_seconds: 999999, kind: 'focus' });
+    assert.equal(res.status, 200);
+    assert.ok(
+      (await res.json()).loggedMinutes <= 1440,
+      'a session may not log more than a day of study',
+    );
+  });
+
+  test('a negative figure logs nothing rather than a credit', async () => {
+    const c = await signedIn();
+    const res = await c.post('/api/study/sessions', { focus_seconds: -500, kind: 'focus' });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).loggedMinutes, 0);
+  });
+});
+
+describe('the ledger page size', () => {
+  // A fractional limit reached SQLite as `LIMIT 2.5` -> SQLITE_MISMATCH -> 500.
+  test('a fractional limit does not crash the route', async () => {
+    const c = await signedIn();
+    for (const bad of ['2.5', '1e3', '-5', 'abc']) {
+      const res = await c(`/api/study/logs?limit=${encodeURIComponent(bad)}`);
+      assert.notEqual(res.status, 500, `limit=${bad} must not be a 500`);
+      assert.ok(res.status === 200, `limit=${bad} should answer 200, got ${res.status}`);
+    }
+  });
+
+  test('hasMore is false on the last page, not true forever', async () => {
+    // rows.length === limit is also true when the count is an exact multiple
+    // of the limit, so the feed offered to page forever.
+    const c = await signedIn();
+    for (let i = 0; i < 3; i += 1) {
+      await c.post('/api/study/sessions', { focus_seconds: 600, kind: 'focus' });
+    }
+    const exact = await (await c('/api/study/logs?limit=3')).json();
+    assert.equal(exact.entries.length, 3);
+    assert.equal(exact.hasMore, false, 'three rows with limit=3 is the whole feed');
+
+    const under = await (await c('/api/study/logs?limit=10')).json();
+    assert.equal(under.hasMore, false);
+    const over = await (await c('/api/study/logs?limit=2')).json();
+    assert.equal(over.hasMore, true, 'a genuine partial page does report more');
+  });
+});
+
+describe('a boolean sent as a string', () => {
+  // Boolean('false') is true, so a form-encoded or JSON-stringified boolean
+  // silently inverted the tick.
+  test('"false" does not become true', async () => {
+    const c = await signedIn();
+    await c.put('/api/study/plan', { weekday: 2, active: true, planned_minutes: 60 });
+    const res = await c.put('/api/study/plan', { weekday: 2, active: 'false' });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).active, false, '"false" must mean false');
+  });
+
+  test('the real booleans still work', async () => {
+    const c = await signedIn();
+    const off = await c.put('/api/study/plan', { weekday: 3, active: false, planned_minutes: 60 });
+    assert.equal((await off.json()).active, false);
+    const on = await c.put('/api/study/plan', { weekday: 3, active: true, planned_minutes: 60 });
+    assert.equal((await on.json()).active, true);
   });
 });
 

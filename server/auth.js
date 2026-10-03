@@ -34,6 +34,21 @@ export function verifyPassword(password, stored) {
 // Hand-rolled on node:crypto so the app keeps a single runtime dependency.
 
 /**
+ * Whether this process is a real deployment.
+ *
+ * Vercel sets VERCEL=1 on every function, and VERCEL_ENV to 'production' or
+ * 'preview'. The original guard here only looked at NODE_ENV and VERCEL=1, so a
+ * deploy relying on VERCEL_ENV — and preview deployments, which are not
+ * production but are still the internet — booted with the development fallback.
+ * One predicate, used by both the check and the eager boot test below, so the
+ * two cannot drift apart again.
+ */
+const isProduction = () => process.env.NODE_ENV === 'production'
+  || process.env.VERCEL === '1'
+  || process.env.VERCEL === 'true'
+  || process.env.VERCEL_ENV === 'production';
+
+/**
  * The HMAC key sessions are signed with.
  *
  * There used to be a literal fallback here — 'pixelflow-dev-secret-…' — so a
@@ -41,20 +56,16 @@ export function verifyPassword(password, stored) {
  * who had read the source could mint a token for any user id and be accepted.
  * The name says "do not use in production", which is not a control.
  *
- * So the fallback now exists only when running outside a production deployment,
- * where a laptop with no .env still works. Under NODE_ENV=production an unset
- * JWT_SECRET is fatal at boot rather than quietly insecure. The generated value
- * is per-process and random, so even a non-production run does not share a key
- * with anything else.
+ * So the fallback now exists only when running outside a deployment, where a
+ * laptop with no .env still works. Under a deployment an unset JWT_SECRET is
+ * fatal at boot rather than quietly insecure. The generated value is per-process
+ * and random, so even a local run does not share a key with anything else.
  */
 function secret() {
   const configured = process.env.JWT_SECRET;
   if (configured) return configured;
 
-  const production = process.env.NODE_ENV === 'production'
-    || process.env.VERCEL === '1'
-    || process.env.VERCEL_ENV === 'production';
-  if (production) {
+  if (isProduction()) {
     throw new Error(
       'JWT_SECRET is not set. Refusing to start: without it every session could '
       + 'be forged. Set a long random value in the environment (see .env.example).',
@@ -66,12 +77,12 @@ function secret() {
 }
 
 // Checked at import time, not lazily. secret() is only called when a token is
-// signed or read, so a production deploy with no JWT_SECRET would otherwise
-// start, answer /api/health, and serve static assets happily — then throw on
-// the first login, by which point the failure looks like an outage rather than
-// a misconfiguration. Importing this module is part of booting the app, so the
+// signed or read, so a deployment with no JWT_SECRET would otherwise start,
+// answer /api/health, and serve static assets happily — then throw on the first
+// login, by which point the failure looks like an outage rather than a
+// misconfiguration. Importing this module is part of booting the app, so the
 // throw lands before the listener is up.
-if (process.env.NODE_ENV === 'production' || process.env.VERCEL === '1') {
+if (isProduction()) {
   secret();
 }
 

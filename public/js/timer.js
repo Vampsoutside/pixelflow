@@ -74,7 +74,13 @@ export function renderTopics() {
     chip.className = `topic-chip${active ? ' active' : ''}`;
     chip.style.background = active ? topic.color : '';
     chip.style.borderColor = active ? topic.color : '';
-    chip.innerHTML = `<span>${topic.name}</span>`;
+    // textContent, not innerHTML: the tag name is the user's own, stored and
+    // returned verbatim, so `<img src=x onerror=...>` round-tripped through
+    // POST /api/tags and executed here. Self-inflicted only, but a tag is
+    // shared data the day someone else can see it, so it is not worth the risk.
+    const label = document.createElement('span');
+    label.textContent = topic.name;
+    chip.append(label);
     chip.addEventListener('click', () => selectTopic(topic));
     ui.topicRow.append(chip);
   }

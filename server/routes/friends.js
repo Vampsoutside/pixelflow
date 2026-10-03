@@ -103,9 +103,17 @@ router.post('/request', async (req, res) => {
     return res.status(409).json({ error: `You and ${other.username} are already friends.` });
   }
   if (existing) {
-    // They already asked you, so this counts as accepting it.
-    await db.prepare("UPDATE friendships SET status = 'accepted' WHERE id = ?").run(existing.id);
-    return res.json({ status: 'friends' });
+    // Only accept when THEY asked US. findFriendship matches the pair in either
+    // direction, so replaying your own request used to find your own pending
+    // row and flip it to accepted — befriending someone who never agreed, and
+    // emptying their pending list so they never even saw the ask.
+    if (existing.status === 'pending' && existing.requester_id !== req.user.id) {
+      await db.prepare("UPDATE friendships SET status = 'accepted' WHERE id = ?").run(existing.id);
+      return res.json({ status: 'friends' });
+    }
+    // Your own request is already outstanding: re-sending is a no-op, not an
+    // acceptance.
+    return res.status(409).json({ error: 'You have already asked them.' });
   }
 
   await db.prepare(

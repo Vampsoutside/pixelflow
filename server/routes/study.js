@@ -198,7 +198,12 @@ router.put('/plan', async (req, res) => {
   ).get(req.user.id, day);
 
   const next = {
-    active: active === undefined ? Boolean(existing?.active) : Boolean(active),
+    // Boolean('false') is true, so a client sending a JSON-stringified boolean
+    // silently inverted the tick. Accept the real booleans and the strings a
+    // form post produces, and treat anything else as absent.
+    active: active === undefined
+      ? Boolean(existing?.active)
+      : (active === true || active === 'true' || active === 1),
     minutes: plannedMinutes === undefined
       ? (existing?.planned_minutes ?? 0)
       : Math.max(0, Math.min(24 * 60, Math.round(Number(plannedMinutes) || 0))),
@@ -242,7 +247,15 @@ router.put('/plan/all', async (req, res) => {
 // ── timer session completion (drives the auto-add toggle) ────────────────
 
 router.post('/sessions', async (req, res) => {
-  const seconds = Math.max(0, Math.round(Number(req.body?.focus_seconds) || 0));
+  // A pomodoro cannot exceed a day, and the manual /entry route already caps at
+  // 1440 minutes. Unbounded, a client sending focus_seconds: 999999 logged
+  // 16,666,666 minutes into study_entries — a figure past every chart's
+  // assumptions, and one no edit could later bring back into range.
+  const MAX_SESSION_SECONDS = 24 * 60 * 60;
+  const seconds = Math.min(
+    MAX_SESSION_SECONDS,
+    Math.max(0, Math.round(Number(req.body?.focus_seconds) || 0)),
+  );
   const topic = String(req.body?.topic || '').slice(0, 40);
   const kind = req.body?.kind === 'break' ? 'break' : 'focus';
   const tagId = await ownedTagId(req.user.id, req.body?.tagId);
@@ -293,9 +306,18 @@ router.post('/sessions', async (req, res) => {
  * lets the client colour them differently and sum them together.
  */
 router.get('/logs', async (req, res) => {
-  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 60));
+  // Truncated to an integer: a fractional limit reached SQLite as `LIMIT 2.5`
+  // and raised SQLITE_MISMATCH, which the error middleware turned into a 500.
+  const asked = Math.trunc(Number(req.query.limit));
+  const limit = Number.isFinite(asked) ? Math.min(200, Math.max(1, asked)) : 60;
   const before = Number(req.query.before) || Number.MAX_SAFE_INTEGER;
-  const rows = await studyLedgerPage(req.user.id, before, limit);
+
+  // hasMore cannot be inferred from a full page alone: when the row count is an
+  // exact multiple of the limit, `rows.length === limit` is true on the LAST
+  // page too, so the feed kept offering to load older entries and paging never
+  // terminated. Fetch one extra row instead and report whether it was real.
+  const more = await studyLedgerPage(req.user.id, before, limit + 1);
+  const rows = more.slice(0, limit);
 
   return res.json({
     entries: rows.map((r) => ({
@@ -306,7 +328,7 @@ router.get('/logs', async (req, res) => {
       tag: r.tag_id ? { id: r.tag_id, name: r.tag_name, color: r.tag_color } : null,
       createdAt: r.created_at,
     })),
-    hasMore: rows.length === limit,
+    hasMore: more.length > limit,
   });
 });
 
