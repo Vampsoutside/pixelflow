@@ -1,4 +1,5 @@
 import { api, ApiError } from './api.js';
+import { consentDecided, openConsentBanner } from './consent.js';
 import { store, setUser, subscribe, fetchOverview } from './store.js';
 import { el, $, $$, toast, minutesShort, formatRelative } from './ui.js';
 import { drawPose } from './avatar.js';
@@ -35,6 +36,21 @@ let navToken = 0;
 //  BOOT
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── cookie consent ────────────────────────────────────────────────────
+
+/**
+ * Shows the consent banner on a first visit.
+ *
+ * It does not gate the app: the session cookie is set by the server the moment
+ * the page loads, and saying otherwise would be a lie. What the visitor decides
+ * here is everything outside that essential set. Mounted before the session
+ * check so it appears whether or not anybody is signed in.
+ */
+function wireConsent() {
+  if (consentDecided()) return;
+  openConsentBanner();
+}
+
 async function boot() {
   initParticles();
   wireSidebar();
@@ -42,6 +58,7 @@ async function boot() {
 
   // Read before the session check: a successful provider callback signs the
   // person in, so the interesting case is the one where a user *is* found.
+  wireConsent();
   await reportAuthResult();
 
   const { user } = await api.get('/api/auth/session').catch(() => ({ user: null }));

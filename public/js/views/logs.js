@@ -3,23 +3,28 @@ import { api } from '../api.js';
 import { invalidateStudy } from '../store.js';
 
 /**
- * Logs, in two filters and no more.
+ * Logs, as one feed.
  *
- * STUDYLOG is the study ledger: every change to a day's total, whether typed in
- * or produced by a finished pomodoro. LOG is the task archive — a task that was
- * ticked complete leaves the Tasks window and lands here, where Restore undoes
- * it. Nothing else is logged, because a feed of "created tag" and "signed in"
- * rows is noise next to the two things somebody actually looks up.
+ * STUDYLOG and LOG used to be two filters over the same pane, so every visit
+ * began by choosing a lens and then half the history was invisible. There was
+ * no reason for the split: both are dated, both are append-only until you act
+ * on them, and each row carries its own icon and wording. So both streams are
+ * merged into a single chronological feed, newest first, with a filter that
+ * narrows the feed rather than replacing it. Nothing is logged beyond these
+ * two, because a feed of "created tag" and "signed in" rows is noise next to
+ * the things somebody actually looks up.
  */
 
 const FILTERS = {
-  studylog: { label: 'STUDYLOG', hint: 'Every change to your study time, newest first.' },
-  log: { label: 'LOG', hint: 'Tasks you completed. Restore one to put it back on the board.' },
+  all: { label: 'ALL', hint: 'Every change to your study time and every task you finished, newest first.' },
+  study: { label: 'STUDY', hint: 'Every change to your study time, newest first.' },
+  tasks: { label: 'TASKS', hint: 'Tasks you completed. Restore one to put it back on the board.' },
 };
 
 let host = null;
 let panel = null;
-let filter = 'studylog';
+/** Which streams are shown. 'all' shows both; the rest narrow the same feed. */
+let filter = 'all';
 
 let entries = [];
 let cursor = null;
@@ -27,7 +32,6 @@ let hasMore = false;
 let loaded = false;
 
 let tasks = [];
-let tagsById = new Map();
 
 export const logsSection = {
   async mount(container, ctx = {}) {
@@ -51,20 +55,19 @@ async function load({ reset = false } = {}) {
     show('Loading your history…');
   }
 
+  // Both streams are needed by every filter now, so they load together rather
+  // than one filter at a time.
   try {
-    if (filter === 'studylog') {
-      const params = new URLSearchParams({ limit: '60' });
-      if (cursor) params.set('before', String(cursor));
-      const data = await api.get(`/api/study/logs?${params}`);
-      entries = [...entries, ...data.entries];
-      cursor = data.entries.at(-1)?.id ?? null;
-      hasMore = data.hasMore;
-    } else {
-      const data = await api.get('/api/tasks');
-      tasks = data.tasks;
-      tagsById = new Map(data.tags.map((t) => [t.id, t]));
-      hasMore = false;
-    }
+    const params = new URLSearchParams({ limit: '60' });
+    if (cursor) params.set('before', String(cursor));
+    const [study, taskData] = await Promise.all([
+      api.get(`/api/study/logs?${params}`),
+      api.get('/api/tasks'),
+    ]);
+    entries = [...entries, ...study.entries];
+    cursor = study.entries.at(-1)?.id ?? null;
+    hasMore = study.hasMore;
+    tasks = taskData.tasks;
   } catch (err) {
     loaded = true;
     show(err.message || 'Could not load your logs.');
@@ -84,12 +87,8 @@ function show(message) {
 // ── render ───────────────────────────────────────────────────────────────
 
 function render() {
-  // One feed for study entries, one for the task archive; whichever is active
-  // decides both the empty state and what gets appended below.
-  const study = filter === 'studylog';
-  const emptyText = study
-    ? 'Nothing logged yet. Type hours into the Calendar, or finish a pomodoro and let it add itself.'
-    : 'No completed tasks yet. Tick something off in Tasks and it will appear here.';
+  const { study, tasks: taskRows } = merged();
+  const empty = study.length === 0 && taskRows.length === 0;
 
   host.innerHTML = '';
   host.append(el('div', { class: 'pane' }, [
@@ -98,63 +97,72 @@ function render() {
       el('div', { class: 'pane-sub', text: FILTERS[filter].hint }),
     ]),
     filterRow(),
-    (study ? entries.length === 0 : tasks.every((t) => !t.done))
-      ? el('div', { class: 'empty', text: emptyText })
+    empty
+      ? el('div', {
+        class: 'empty',
+        text: filter === 'tasks'
+          ? 'No completed tasks yet. Tick something off in Tasks and it will appear here.'
+          : filter === 'study'
+            ? 'Nothing logged yet. Type hours into the Calendar, or finish a pomodoro and let it add itself.'
+            : 'Nothing logged yet. Type hours into the Calendar, finish a pomodoro, or tick off a task.',
+      })
       : null,
   ]));
 
-  if (study) {
-    renderStudyGroups();
-    if (hasMore) {
-      host.append(el('button', {
-        class: 'btn block',
-        text: 'Load older entries',
-        style: { marginBottom: '14px' },
-        onclick: () => load(),
-      }));
-    }
-    return;
+  for (const row of study) host.append(studyRow(row));
+  for (const row of taskRows) host.append(taskRow(row));
+  if (hasMore && filter !== 'tasks') {
+    host.append(el('button', {
+      class: 'btn block',
+      text: 'Load older entries',
+      style: { marginBottom: '14px' },
+      onclick: () => load(),
+    }));
   }
-  renderTaskList();
 }
 
-/** The two filters sit in the main pane, not the side panel. */
+/**
+ * The two streams as one list, newest first.
+ *
+ * Study rows carry a createdAt timestamp; a task only carries the moment it
+ * was ticked done, so that is used for both. They are merged on a single
+ * comparable timestamp rather than being concatenated, because "newest first"
+ * has to mean the same thing across the whole feed.
+ */
+function merged() {
+  const wantStudy = filter === 'all' || filter === 'study';
+  const wantTasks = filter === 'all' || filter === 'tasks';
+
+  const study = wantStudy
+    ? entries.map((entry) => ({ kind: 'study', at: entry.createdAt, entry }))
+    : [];
+  const taskRows = wantTasks
+    ? tasks
+      .filter((t) => t.done)
+      .map((task) => ({ kind: 'task', at: task.doneAt || task.createdAt || '', task }))
+    : [];
+
+  const byTime = (a, b) => String(b.at).localeCompare(String(a.at));
+  return { study: study.sort(byTime), tasks: taskRows.sort(byTime) };
+}
+
+/** Narrows the feed. The streams are already loaded, so this never refetches. */
 function filterRow() {
   return el('div', { class: 'chart-toggle logs-filters' }, Object.entries(FILTERS).map(([key, meta]) => el('button', {
     class: filter === key ? 'active' : '',
     text: meta.label,
     'aria-pressed': String(filter === key),
-    onclick: async () => {
+    onclick: () => {
       if (filter === key) return;
       filter = key;
-      await load({ reset: true });
+      render();
+      if (panel) logsSidePanel(panel);
     },
   })));
 }
 
-function renderStudyGroups() {
-  // Group by the study day an entry belongs to, not by when it was typed, so a
-  // correction filed this afternoon still sits under the day it corrects.
-  const groups = new Map();
-  for (const entry of entries) {
-    if (!groups.has(entry.date)) groups.set(entry.date, []);
-    groups.get(entry.date).push(entry);
-  }
-
-  for (const [day, list] of groups) {
-    const total = list.reduce((sum, e) => sum + e.minutes, 0);
-    host.append(el('div', { class: 'pane' }, [
-      el('div', { class: 'pane-hd' }, [
-        el('div', { class: 'pane-title', text: dayLabel(day) }),
-        el('div', { class: 'pane-sub', text: `${minutesShort(total)} across ${list.length} ${list.length === 1 ? 'entry' : 'entries'}` }),
-      ]),
-      el('div', { class: 'log-list' }, list.map(studyRow)),
-    ]));
-  }
-}
-
 /** One ledger row. Pomodoro and manual are coloured apart so the source reads. */
-function studyRow(entry) {
+function studyRow({ entry }) {
   const timer = entry.source === 'timer';
   const amount = entry.minutes;
 
@@ -169,6 +177,9 @@ function studyRow(entry) {
         document.createTextNode(timer ? ' from a pomodoro' : ' entered by hand'),
       ]),
       el('div', { class: 'log-time' }, [
+        // The day this belongs to, then the moment it was filed: a correction
+        // made today for yesterday should read as such.
+        el('span', { class: 'log-tag', text: dayLabel(entry.date) }),
         entry.tag
           ? el('span', { class: 'log-tag' }, [
             el('i', { class: 'dot', style: { background: entry.tag.color } }),
@@ -204,19 +215,7 @@ function studyRow(entry) {
   return row;
 }
 
-function renderTaskList() {
-  const done = tasks
-    .filter((t) => t.done)
-    .sort((a, b) => String(b.doneAt || '').localeCompare(String(a.doneAt || '')));
-
-  if (done.length === 0) return;
-
-  host.append(el('div', { class: 'pane' }, [
-    el('div', { class: 'log-list' }, done.map(taskRow)),
-  ]));
-}
-
-function taskRow(task) {
+function taskRow({ task }) {
   return el('div', { class: 'log-entry task' }, [
     el('div', { class: 'log-icon task', text: '✅' }),
     el('div', { class: 'log-main' }, [
@@ -272,29 +271,26 @@ export function logsSidePanel(body) {
   body.innerHTML = '';
   if (!loaded) return;
 
-  if (filter === 'studylog') {
-    const timerMinutes = entries.filter((e) => e.source === 'timer').reduce((s, e) => s + e.minutes, 0);
-    const manualMinutes = entries.filter((e) => e.source === 'manual').reduce((s, e) => s + e.minutes, 0);
-    const total = timerMinutes + manualMinutes;
-
-    body.append(el('div', { class: 'sect-hd', text: 'WHAT IS LOADED' }));
-    body.append(el('div', { class: 'kpi' }, [
-      row('Shown here', `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`),
-      row('Pomodoro', minutesShort(timerMinutes)),
-      row('Entered by hand', minutesShort(manualMinutes)),
-      row('Net change', minutesShort(total), total < 0 ? 'neg' : ''),
-    ]));
-    body.append(el('div', { class: 'pane-sub', style: { marginTop: '12px' }, text: 'Deleting an entry takes its minutes back off that day.' }));
-    return;
-  }
-
+  // Both streams, whatever the filter is showing, so the totals describe the
+  // feed rather than one tab of it.
+  const timerMinutes = entries.filter((e) => e.source === 'timer').reduce((s, e) => s + e.minutes, 0);
+  const manualMinutes = entries.filter((e) => e.source === 'manual').reduce((s, e) => s + e.minutes, 0);
+  const total = timerMinutes + manualMinutes;
   const done = tasks.filter((t) => t.done).length;
-  body.append(el('div', { class: 'sect-hd', text: 'TASK ARCHIVE' }));
+  const shownStudy = filter === 'tasks' ? 0 : entries.length;
+  const shownTasks = filter === 'study' ? 0 : done;
+
+  body.append(el('div', { class: 'sect-hd', text: 'WHAT IS LOADED' }));
   body.append(el('div', { class: 'kpi' }, [
-    row('Completed', String(done)),
+    row('Shown here', `${shownStudy + shownTasks} ${shownStudy + shownTasks === 1 ? 'entry' : 'entries'}`),
+    row('Study entries', String(shownStudy)),
+    row('Pomodoro', minutesShort(timerMinutes)),
+    row('Entered by hand', minutesShort(manualMinutes)),
+    row('Net study change', minutesShort(total), total < 0 ? 'neg' : ''),
+    row('Completed tasks', String(shownTasks)),
     row('Still on the board', String(tasks.length - done)),
   ]));
-  body.append(el('div', { class: 'pane-sub', style: { marginTop: '12px' }, text: 'Ticking a task moves it here. Nothing is deleted, so a mis-click is one button away from undone.' }));
+  body.append(el('div', { class: 'pane-sub', style: { marginTop: '12px' }, text: 'Deleting a study entry takes its minutes back off that day. Restoring a task puts it back on the board — nothing here is a hard delete.' }));
 }
 
 function row(label, value, cls = '') {

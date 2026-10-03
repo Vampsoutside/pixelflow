@@ -83,6 +83,27 @@
 .plan-row .stepper .stepper-val { min-width: 40px; font-size: 17px; }
 .plan-row .stepper button { width: 20px; height: 20px; font-size: 13px; }
 .plan-row.rest .stepper { opacity: .3; pointer-events: none; }
+/* The planned-minutes field is directly editable. Native spinners are hidden
+   because the +/- buttons either side already step it, and the number input
+   inherits the read-out styling so editing does not change the row's shape. */
+.plan-edit {
+  width: 52px; text-align: center;
+  background: transparent; border: 1px solid transparent; border-radius: 4px;
+  color: inherit; font-family: inherit; font-size: 17px;
+  -moz-appearance: textfield;
+}
+.plan-edit::-webkit-outer-spin-button,
+.plan-edit::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.plan-edit:hover:not(:disabled) { border-color: var(--border2); }
+.plan-edit:focus {
+  border-color: var(--accent); background: var(--surface2);
+  outline: none; box-shadow: 0 0 0 2px var(--accent-soft, rgba(124,111,255,.2));
+}
+.plan-edit:disabled { opacity: .55; cursor: default; }
+.plan-edit-cap {
+  min-width: 34px; font-size: 10px; color: var(--muted);
+  text-align: left; white-space: nowrap;
+}
 .plan-actual { font-size: 10px; color: var(--muted); text-align: right; white-space: nowrap; }
 .plan-actual.met { color: var(--good); }
 

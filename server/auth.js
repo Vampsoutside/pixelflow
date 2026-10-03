@@ -90,7 +90,16 @@ export function setSessionCookie(res, userId) {
 }
 
 export function clearSessionCookie(res) {
-  res.clearCookie(SESSION_COOKIE, { path: '/' });
+  // Express matches a cleared cookie on name, domain and path only — the other
+  // attributes do not have to match for the deletion to take. They are passed
+  // anyway so the two sites cannot drift apart and start describing different
+  // cookies.
+  res.clearCookie(SESSION_COOKIE, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: useHttps(),
+    path: '/',
+  });
 }
 
 // ── CSRF ─────────────────────────────────────────────────────────────────
@@ -142,6 +151,9 @@ export function ensureCsrfCookie(req, res, next) {
     res.cookie(`${SESSION_COOKIE}_csrf`, csrfToken(), {
       httpOnly: false, // the client reads it to set the header
       sameSite: 'lax',
+      // The session cookie carries Secure over HTTPS; leaving this one without
+      // it let a downgrade to http carry the CSRF token in the clear.
+      secure: useHttps(),
       maxAge: sessionDays() * 86400 * 1000,
       path: '/',
     });

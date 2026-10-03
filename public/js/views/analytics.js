@@ -199,21 +199,26 @@ function weekPane(data) {
   const week = data.week;
   const todayKey = dayKey();
 
-  // The +/- steppers must not go through reload(). That wiped the pane to a
-  // skeleton, refetched the month and rebuilt every chart, so each click threw
-  // away the scroll position and re-rendered the whole view — which is what
-  // "it refreshes the page for each +" looked like. The server already returns
-  // the new weekly total in the PUT response, so the stepper updates in place
-  // and one quiet reload reconciles everything else afterwards.
-  let reconcile = null;
-  const scheduleReconcile = () => {
-    clearTimeout(reconcile);
-    reconcile = setTimeout(() => { invalidateStudy(); reload(); }, 700);
-  };
-
-  // One element, shared by every row and the summary below, so stepping a day
-  // never has to re-render the pane to move the total.
+  // Every write below is rendered straight from the response, so a plan edit
+  // never re-renders this pane. An earlier version updated in place and then
+  // still called reload() on a 700ms debounce, which wiped the pane to a
+  // skeleton and rebuilt every chart — the exact "it refreshes the page for
+  // each +" this is meant to remove. Nothing here reloads; other panes pick
+  // the change up because invalidateStudy() drops the cached overview, so
+  // whichever one mounts next reads fresh totals.
+  //
+  // One element, shared by every row and the summary below, so editing a day
+  // never has to re-render to move the total.
   const totalNum = el('div', { class: 'week-total-num', text: week.plannedText });
+  const weekBar = el('div', { class: `bar-fill${week.met ? ' met' : ''}`, style: { width: `${week.ratio * 100}%` } });
+  const weekPct = el('div', {
+    class: `progress-pct${week.met ? ' met' : ''}`,
+    text: week.planned > 0 ? `${Math.round(week.ratio * 100)}%` : '',
+  });
+  const weekLine = el('div', { class: 'progress-planned', style: { textAlign: 'left' } }, [
+    el('b', { text: week.studiedText }),
+    document.createTextNode(` studied of ${week.plannedText} planned`),
+  ]);
 
   const rows = data.planGrid.map((day) => {
     const isToday = day.date === todayKey;
@@ -222,9 +227,22 @@ function weekPane(data) {
       : '';
     const barWidth = day.planned > 0 ? Math.min(100, (day.studied / day.planned) * 100) : 0;
 
-    // Painted locally the instant a click lands, so the number under the
-    // cursor moves immediately even before the network answers.
-    const plannedLabel = el('div', { class: 'stepper-val', text: day.active ? hours(day.planned) : '—' });
+    // The hours are an editable field, not a read-out: clicking it turns the
+    // value into a number input so a day can be set to an exact figure rather
+    // than only reached by repeated 30-minute steps. Enter or blur commits,
+    // Escape abandons.
+    const plannedInput = el('input', {
+      class: 'stepper-val plan-edit',
+      type: 'number',
+      min: '0',
+      max: '1440',
+      step: '15',
+      inputmode: 'numeric',
+      value: String(day.active ? day.planned : 0),
+      'aria-label': `Planned minutes on ${day.label}`,
+      title: 'Click to type exact planned minutes',
+    });
+    plannedInput.disabled = !day.active;
     const tick = el('div', {
       class: 'plan-tick',
       role: 'checkbox',
@@ -234,6 +252,10 @@ function weekPane(data) {
       text: day.active ? '✓' : '',
     });
 
+    // Replaces the read-out: the input shows exact minutes, the caption beside
+    // it shows the same figure in human form so the unit is never ambiguous.
+    const caption = el('div', { class: 'plan-edit-cap', text: day.active ? hours(day.planned) : '' });
+
     // Optimistic state for this row, so rapid clicks accumulate instead of
     // fighting over the stale server value.
     let planned = day.planned;
@@ -242,19 +264,51 @@ function weekPane(data) {
     function paintOptimistic() {
       tick.textContent = active ? '✓' : '';
       tick.setAttribute('aria-checked', String(active));
-      plannedLabel.textContent = active ? hours(planned) : '—';
+      plannedInput.disabled = !active;
+      if (document.activeElement !== plannedInput) plannedInput.value = String(active ? planned : 0);
+      caption.textContent = active ? hours(planned) : '';
       const row = tick.closest('.plan-row');
       row?.classList.toggle('active', active);
       row?.classList.toggle('rest', !active);
-      // Keep the weekly total honest while stepping — it is the number people
-      // watch when adjusting several days in a row.
+      // Recompute the weekly total locally so the summary tracks every edit
+      // without waiting for — or triggering — a re-render.
       let sum = 0;
       for (const d of data.planGrid) {
         if (d.date === day.date) sum += active ? planned : 0;
         else if (d.active) sum += d.planned;
       }
       totalNum.textContent = minutes(sum);
+      if (week.planned > 0) {
+        const ratio = Math.min(1, week.studied / sum);
+        weekBar.style.width = `${sum > 0 ? ratio * 100 : 0}%`;
+        weekBar.className = `bar-fill${week.studied >= sum && sum > 0 ? ' met' : ''}`;
+        weekPct.textContent = sum > 0 ? `${Math.round((week.studied / sum) * 100)}%` : '';
+        weekPct.className = `progress-pct${week.studied >= sum && sum > 0 ? ' met' : ''}`;
+        weekLine.replaceChildren(
+          el('b', { text: week.studiedText }),
+          document.createTextNode(` studied of ${minutes(sum)} planned`),
+        );
+      }
     }
+
+    // Commit a typed figure. Clamped to a day, and a blank or nonsense entry
+    // falls back to the value already on screen rather than writing zero.
+    function commitTyped() {
+      const typed = Number(plannedInput.value);
+      if (!Number.isFinite(typed)) { plannedInput.value = String(active ? planned : 0); return; }
+      const next = Math.max(0, Math.min(24 * 60, Math.round(typed)));
+      if (next === planned && active) return;
+      planned = next;
+      active = true;
+      paintOptimistic();
+      patch({ planned_minutes: planned, active: true });
+    }
+
+    plannedInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); commitTyped(); plannedInput.blur(); }
+      if (event.key === 'Escape') { event.preventDefault(); plannedInput.value = String(planned); plannedInput.blur(); }
+    });
+    plannedInput.addEventListener('blur', commitTyped);
 
     // One request at a time per row, with clicks that landed mid-flight queued
     // behind it, so hammering + cannot reorder the writes.
@@ -270,18 +324,20 @@ function weekPane(data) {
           const body = { weekday: day.weekday, ...queued };
           queued = null;
           const res = await api.put('/api/study/plan', body);
-          // Adopt the server's values so the stepper follows the real state.
+          // Adopt the server's values so the field follows the real state.
           if (typeof res.minutes === 'number') planned = res.minutes;
           if (typeof res.active === 'boolean') active = res.active;
           paintOptimistic();
           if (res.weekly?.plannedText) totalNum.textContent = res.weekly.plannedText;
         }
+        // Drops the cached overview so the side panel and any pane mounted
+        // later read fresh totals. Deliberately no reload(): that is what used
+        // to wipe the pane a moment after every click.
+        invalidateStudy();
         window.dispatchEvent(new CustomEvent('pixelflow:stats'));
-        scheduleReconcile();
       } catch (err) {
         toast(err.message || 'Could not update the plan', 3000);
         invalidateStudy();
-        await reload();
       } finally {
         inFlight = false;
       }
@@ -322,7 +378,7 @@ function weekPane(data) {
               patch({ planned_minutes: planned, active: true });
             },
           }),
-          plannedLabel,
+          plannedInput,
           el('button', {
             text: '+', 'aria-label': `More planned time on ${day.label}`,
             onclick: () => {
@@ -333,6 +389,7 @@ function weekPane(data) {
             },
           }),
         ]),
+        caption,
       ]),
       el('div', {
         class: `plan-actual${fill === 'met' ? ' met' : ''}`,
@@ -344,7 +401,7 @@ function weekPane(data) {
   return el('div', { class: 'pane' }, [
     el('div', { class: 'pane-hd' }, [
       el('div', { class: 'pane-title', text: 'WEEKLY PLAN' }),
-      el('div', { class: 'pane-sub', text: 'Tick a day, then set its hours. The weekly total is always the sum of ticked days.' }),
+      el('div', { class: 'pane-sub', text: 'Tick a day, then click its hours to type an exact figure — or use the − and + to step by half an hour.' }),
     ]),
     el('div', { class: 'week-total' }, [
       el('div', { style: { minWidth: '92px' } }, [
@@ -353,18 +410,10 @@ function weekPane(data) {
       ]),
       el('div', { style: { flex: '1' } }, [
         el('div', { class: 'progress-nums' }, [
-          el('div', { class: 'progress-planned', style: { textAlign: 'left' } }, [
-            el('b', { text: week.studiedText }),
-            document.createTextNode(` studied of ${week.plannedText} planned`),
-          ]),
-          el('div', {
-            class: `progress-pct${week.met ? ' met' : ''}`,
-            text: week.planned > 0 ? `${Math.round(week.ratio * 100)}%` : '',
-          }),
+          weekLine,
+          weekPct,
         ]),
-        el('div', { class: 'bar' }, [
-          el('div', { class: `bar-fill${week.met ? ' met' : ''}`, style: { width: `${week.ratio * 100}%` } }),
-        ]),
+        el('div', { class: 'bar' }, [weekBar]),
         el('div', { class: 'pane-sub', style: { marginTop: '5px' }, text: `${week.start} → ${week.end}` }),
       ]),
     ]),

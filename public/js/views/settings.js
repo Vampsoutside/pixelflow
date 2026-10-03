@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { store, settings, updateSetting, setUser } from '../store.js';
 import { timer, skipToBreak, applyFocusLength } from '../timer.js';
 import { spotifyConfig, spotifyStatus } from '../media/spotify.js';
+import { CATEGORIES, consentGranted, openConsentBanner } from '../consent.js';
 
 const THEMES = [
   { label: 'Night', c1: '#0d0d1a', c2: '#12122a' },
@@ -32,6 +33,45 @@ function applyTheme(next) {
 
 let host = null;
 let panel = null;
+
+// A consent banner that can only be answered once is not really a choice, so
+// the current decision is shown here and the banner can be reopened. Sits in
+// its own pane because it is about the browser, not about the account.
+function consentPane() {
+  const granted = consentGranted();
+  const labelFor = (id) => CATEGORIES.find((c) => c.id === id)?.label || id;
+  // "Strictly necessary" alone reads badly on its own, so the summary is
+  // spelled out rather than assembled from raw ids.
+  const summary = granted.length === CATEGORIES.length
+    ? 'All categories accepted'
+    : granted.length === 1
+      ? 'Only strictly necessary cookies'
+      : `${granted.length} of ${CATEGORIES.length} categories accepted`;
+
+  return el('div', { class: 'pane' }, [
+    el('div', { class: 'pane-hd' }, [
+      el('div', { class: 'pane-title', text: 'COOKIES & STORAGE' }),
+    ]),
+    el('div', { class: 'setting-row' }, [
+      el('div', { class: 'setting-info' }, [
+        el('div', { class: 'setting-label', text: 'Your choice' }),
+        el('div', {
+          class: 'setting-hint',
+          text: `${summary} — including ${labelFor('essential').toLowerCase()}, which keeps you signed in.`,
+        }),
+      ]),
+      el('button', {
+        class: 'btn small',
+        text: 'Change',
+        onclick: () => openConsentBanner(granted),
+      }),
+    ]),
+    el('div', { class: 'sp-note', style: { marginTop: '12px' } }, [
+      el('b', { text: 'Your session cookie is always set. ' }),
+      document.createTextNode('It is how the app knows you are signed in, so it cannot be switched off. Everything else on this list is yours to decline.'),
+    ]),
+  ]);
+}
 
 export const settingsSection = {
   async mount(container, ctx = {}) {
@@ -152,6 +192,7 @@ async function render() {
         },
       }),
     ]),
+    consentPane(),
   );
 
   if (panel) settingsSidePanel(panel);

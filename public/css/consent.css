@@ -1,0 +1,77 @@
+/* ── COOKIE CONSENT ────────────────────────────────────────────────────────
+   A bottom-anchored panel rather than a full-screen overlay: the session
+   cookie is already set by the server, so this is a disclosure, not a gate.
+   Nothing here blocks the page, which is also why aria-modal is not set on the
+   dialog in app.js.                                                          */
+
+.cookie-banner {
+  position: fixed;
+  left: 50%; bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 90;
+  width: min(560px, calc(100vw - 28px));
+  padding: 16px 18px;
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  background: var(--surface2);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .38);
+  animation: cookie-rise .28s ease-out;
+}
+@keyframes cookie-rise {
+  from { opacity: 0; transform: translate(-50%, 14px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.cookie-body .pane-title { margin-bottom: 2px; }
+
+/* Categories stay hidden until "Customise" is pressed, so the default view is
+   two sentences rather than a wall of checkboxes. */
+.cookie-cats {
+  display: none;
+  margin-top: 12px;
+  max-height: 42vh;
+  overflow-y: auto;
+}
+.cookie-banner.custom .cookie-cats { display: block; }
+
+.cookie-cat {
+  display: flex; gap: 9px; align-items: flex-start;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 11px; line-height: 1.55;
+  color: var(--muted);
+  cursor: pointer;
+}
+.cookie-cat b { color: var(--text); }
+.cookie-cat input {
+  margin: 2px 0 0; flex: 0 0 auto;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.cookie-cat.locked { cursor: default; }
+.cookie-cat.locked input { cursor: not-allowed; }
+
+.cookie-actions {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-top: 14px;
+}
+/* "Save choices" only makes sense once the list is showing. */
+.save-consent { display: none; }
+.cookie-banner.custom .save-consent { display: inline-block; }
+
+@media (max-width: 560px) {
+  .cookie-banner {
+    left: 10px; right: 10px; bottom: 10px;
+    width: auto; transform: none;
+    padding: 14px;
+  }
+  @keyframes cookie-rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .cookie-actions .btn { flex: 1 1 auto; }
+}
+
+/* Someone who has already answered must not be asked again, and a banner that
+   fails to render (a JS error above it, say) must not leave the page unusable
+   — so it is deliberately non-blocking, with no backdrop. */

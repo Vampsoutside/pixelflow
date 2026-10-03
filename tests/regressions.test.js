@@ -326,6 +326,86 @@ describe('turning a timed event into a deadline', () => {
   });
 });
 
+// ── session cookie attributes ────────────────────────────────────────────
+
+describe('the session cookie', () => {
+  // The cookie is how the app knows who you are, so its attributes are what
+  // stand between a stolen session and a working login. These assert the
+  // Set-Cookie header verbatim rather than the parsed result, because the
+  // failure mode is a missing attribute and a cookie jar hides that.
+  const cookieFor = async (c) => {
+    // Goes through the jar's POST helper, which fetches a CSRF token first —
+    // a bare POST is rejected 403 and never reaches the cookie.
+    const res = await c.post('/api/auth/guest');
+    return res.headers.getSetCookie().find((x) => x.startsWith('pf_session=')) || '';
+  };
+
+  test('is httpOnly, so script cannot read the session', async () => {
+    const c = client();
+    const raw = await cookieFor(c);
+    assert.match(raw, /HttpOnly/i, 'the session cookie must be httpOnly');
+  });
+
+  test('is SameSite=Lax, so cross-site POSTs cannot forge a write', async () => {
+    const c = client();
+    const raw = await cookieFor(c);
+    assert.match(raw, /SameSite=Lax/i);
+  });
+
+  test('carries an expiry, so the session can outlive the browser session', async () => {
+    const c = client();
+    const raw = await cookieFor(c);
+    assert.match(raw, /Max-Age=\d+|Expires=/i, 'the cookie must persist to keep the user signed in');
+  });
+
+  test('the CSRF cookie is readable by the client but never HttpOnly', async () => {
+    // The reverse of the session cookie, and for the same reason: the client
+    // has to read this one to echo it back as a header. Asserted on a fresh
+    // jar, where the cookie is actually being minted.
+    const c = client();
+    const res = await c('/api/auth/session');
+    const raw = res.headers.getSetCookie().find((x) => x.startsWith('pf_session_csrf='));
+    assert.ok(raw, 'the first session request must mint a CSRF cookie');
+    assert.doesNotMatch(raw, /HttpOnly/i, 'the client must be able to read the CSRF token');
+  });
+
+  test('signing out clears it, rather than leaving a usable cookie behind', async () => {
+    const c = client();
+    await c.post('/api/auth/guest');
+    assert.ok(await c.user(), 'a guest session exists');
+
+    const out = await c.post('/api/auth/logout');
+    const cleared = out.headers.getSetCookie().find((x) => x.startsWith('pf_session='));
+    assert.ok(cleared, 'logout must send a Set-Cookie that clears the session');
+    // An expired, emptied value is how a cookie is cleared.
+    assert.match(cleared, /pf_session=;|pf_session=""/, 'the session must be emptied');
+    assert.match(cleared, /Expires=Thu, 01 Jan 1970|Max-Age=0/i, 'and expired');
+
+    const after = await c('/api/auth/session');
+    assert.equal((await after.json()).user, null, 'the session must not survive logout');
+  });
+
+  // The real gap: over HTTPS the session cookie was marked Secure while the
+  // CSRF token was not, so a downgrade to plain http carried the write token in
+  // the clear. Asserted by re-reading the flag with USE_HTTPS on.
+  test('over HTTPS the CSRF cookie is marked Secure too', async () => {
+    // A brand-new jar has no CSRF cookie, so this request is the one that
+    // mints it — and the only point at which the attribute can be asserted.
+    const c = client();
+    const before = process.env.USE_HTTPS;
+    process.env.USE_HTTPS = '1';
+    try {
+      const res = await c('/api/auth/session');
+      const raw = res.headers.getSetCookie().find((x) => x.startsWith('pf_session_csrf='));
+      assert.ok(raw, 'the first session request must mint a CSRF cookie');
+      assert.match(raw, /Secure/i, 'the CSRF cookie must be Secure when the session cookie is');
+    } finally {
+      if (before === undefined) delete process.env.USE_HTTPS;
+      else process.env.USE_HTTPS = before;
+    }
+  });
+});
+
 // ── writing a single day of the weekly plan ────────────────────
 
 describe('PUT /api/study/plan', () => {

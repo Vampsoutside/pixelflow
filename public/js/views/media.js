@@ -11,7 +11,8 @@ import {
 
 let host = null;
 let panel = null;
-let soundcloudUrl = '';
+/** The last link pasted into the "other media" pane, kept across tab switches. */
+let mediaUrl = '';
 let onChange = () => {};
 
 export const mediaSection = {
@@ -32,7 +33,7 @@ async function render() {
   host.append(
     el('div', { class: 'media-split' }, [
       spotifyPane(config, connected),
-      soundcloudPane(),
+      otherMediaPane(),
     ]),
     soundPane(),
   );
@@ -128,27 +129,30 @@ function spotifyFallback() {
   const input = el('input', { class: 'inp', placeholder: 'Spotify track, album or playlist URL…' });
   const frame = el('div');
 
+  // Shares the URL parsing with the "other media" pane, so a Spotify link
+  // pasted here and one pasted there behave identically.
   const draw = (url) => {
-    const match = String(url).match(/\/(track|album|playlist)\/([a-zA-Z0-9]+)/);
+    const embed = embedFor(url);
     frame.innerHTML = '';
-    if (!match) {
-      frame.append(el('div', { class: 'media-placeholder', text: 'Paste a Spotify link above to load it here.' }));
+    if (!embed || !embed.src || !embed.src.includes('open.spotify.com')) {
+      frame.append(el('div', { class: 'media-placeholder', text: 'Paste a Spotify track, album or playlist link above to load it here.' }));
       return;
     }
     frame.append(el('div', { class: 'player-shell' }, [
       el('iframe', {
-        src: `https://open.spotify.com/embed/${match[1]}/${match[2]}?utm_source=generator&theme=0`,
-        height: match[1] === 'track' ? '80' : '260',
+        src: embed.src,
+        height: embed.height,
         frameborder: '0',
         allowfullscreen: '',
         allow: 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture',
+        title: 'Spotify player',
       }),
     ]));
   };
-  draw(soundcloudUrl);
+  draw(mediaUrl);
 
   input.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') { soundcloudUrl = input.value; draw(soundcloudUrl); }
+    if (event.key === 'Enter') { mediaUrl = input.value; draw(mediaUrl); }
   });
 
   return el('div', {}, [
@@ -156,7 +160,7 @@ function spotifyFallback() {
       input,
       el('button', {
         class: 'btn', text: 'Load',
-        onclick: () => { soundcloudUrl = input.value; draw(soundcloudUrl); },
+        onclick: () => { mediaUrl = input.value; draw(mediaUrl); },
       }),
     ]),
     frame,
@@ -174,49 +178,146 @@ function connectPlayer() {
   }).catch((err) => toast(err.message || 'Spotify failed to start', 4200));
 }
 
-// ── SoundCloud ───────────────────────────────────────────────────────────
+// ── other media ──────────────────────────────────────────────────────────
 
-function soundcloudPane() {
-  const input = el('input', { class: 'inp', placeholder: 'soundcloud.com/… URL' });
+/**
+ * Turns a pasted URL into an embeddable player.
+ *
+ * The pane used to be SoundCloud-only: any other link fell through the
+ * soundcloud.com match and showed "paste a SoundCloud link", so YouTube, Vimeo,
+ * Bandcamp and a plain MP3 all silently failed. Each host below is mapped to
+ * the iframe it needs; the generic branch embeds an <audio> element, which is
+ * the one case that plays a bare file rather than a hosted page.
+ *
+ * Returns null when nothing matches, so the caller can say so honestly instead
+ * of rendering an empty shell.
+ */
+function embedFor(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return null;
+  // Accept a pasted link with or without the scheme, which is what people
+  // actually paste — "youtu.be/..." more often than the full URL.
+  let href = raw;
+  if (!/^https?:\/\//i.test(href)) href = `https://${href}`;
+
+  let u;
+  try {
+    u = new URL(href);
+  } catch {
+    return null;
+  }
+  // Only http(s), so a javascript: or data: URL can never reach an iframe src.
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+  const host = u.hostname.replace(/^www\./, '');
+
+  // YouTube: watch?v=, youtu.be/, /embed/, /shorts/
+  const ytId = (() => {
+    if (host === 'youtu.be') return u.pathname.slice(1).split('/')[0] || null;
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+      if (u.searchParams.get('v')) return u.searchParams.get('v');
+      const m = u.pathname.match(/^\/(?:embed|shorts|live|v)\/([\w-]{6,})/);
+      return m ? m[1] : null;
+    }
+    return null;
+  })();
+  if (ytId) {
+    return {
+      src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(ytId)}`,
+      height: '380',
+      label: 'YouTube',
+    };
+  }
+
+  // Vimeo: vimeo.com/123456, with the optional /<hash> private-path form.
+  if (host === 'vimeo.com' || host === 'player.vimeo.com') {
+    const m = u.pathname.match(/\/(\d{6,})/);
+    if (m) return { src: `https://player.vimeo.com/video/${m[1]}`, height: '380', label: 'Vimeo' };
+  }
+
+  // SoundCloud, including /sets/ and the resolve short link.
+  if (host === 'soundcloud.com' || host === 'on.soundcloud.com' || host === 'snd.sc') {
+    const m = raw.match(/soundcloud\.com\/([^/\s]+\/[^/\s?#]+)/);
+    if (m) {
+      return {
+        src: `https://w.soundcloud.com/player/?url=${encodeURIComponent(`https://soundcloud.com/${m[1]}`)}&color=%23ff5500&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false`,
+        height: '166',
+        label: 'SoundCloud',
+      };
+    }
+  }
+
+  // Spotify: the embed host differs from the share host.
+  if (host === 'open.spotify.com') {
+    const m = u.pathname.match(/\/(track|album|playlist|artist|show|episode)\/([a-zA-Z0-9]+)/);
+    if (m) {
+      return {
+        src: `https://open.spotify.com/embed/${m[1]}/${m[2]}?utm_source=generator&theme=0`,
+        height: m[1] === 'track' || m[1] === 'episode' ? '120' : '340',
+        label: 'Spotify',
+      };
+    }
+  }
+
+  // A direct audio file: the one case that plays rather than embeds a page.
+  if (/\.(mp3|m4a|aac|ogg|oga|opus|wav|flac)(\?|#|$)/i.test(u.pathname)) {
+    return { audio: u.href, height: '54', label: 'Audio file' };
+  }
+
+  return null;
+}
+
+function otherMediaPane() {
+  const input = el('input', {
+    class: 'inp',
+    placeholder: 'Paste any link — SoundCloud, YouTube, Spotify, a track file…',
+    'aria-label': 'Media link',
+  });
   const frame = el('div');
 
   const draw = (url) => {
-    const match = String(url).match(/soundcloud\.com\/([^\/\s]+\/[^\/\s]+)/);
+    const embed = embedFor(url);
     frame.innerHTML = '';
-    if (!match) {
-      frame.append(el('div', { class: 'media-placeholder', text: 'Paste a SoundCloud link above to load the player.' }));
+    if (!embed) {
+      frame.append(el('div', {
+        class: 'media-placeholder',
+        text: 'That link could not be played here. Paste a SoundCloud, YouTube, Vimeo or Spotify link, or a direct .mp3/.m4a/.ogg file.',
+      }));
       return;
     }
     frame.append(el('div', { class: 'player-shell' }, [
-      el('iframe', {
-        src: `https://w.soundcloud.com/player/?url=${encodeURIComponent(`https://soundcloud.com/${match[1]}`)}&color=%23ff5500&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false`,
-        height: '166',
-        frameborder: '0',
-        allow: 'autoplay',
-        scrolling: 'no',
-      }),
+      embed.audio
+        ? el('audio', { controls: '', src: embed.audio, style: { width: '100%' } })
+        : el('iframe', {
+          src: embed.src,
+          height: embed.height,
+          frameborder: '0',
+          allowfullscreen: '',
+          allow: 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture',
+          scrolling: 'no',
+          title: `${embed.label} player`,
+        }),
     ]));
   };
-  draw(soundcloudUrl);
+  draw(mediaUrl);
 
-  input.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') { soundcloudUrl = input.value; draw(soundcloudUrl); }
-  });
+  const load = () => {
+    mediaUrl = input.value;
+    draw(mediaUrl);
+  };
+  input.addEventListener('keydown', (event) => { if (event.key === 'Enter') load(); });
 
   return el('div', { class: 'pane' }, [
     el('div', { class: 'pane-hd' }, [
-      el('div', { class: 'pane-title', text: 'SOUNDCLOUD' }),
+      el('div', { class: 'pane-title', text: 'OTHER MEDIA' }),
       el('div', { class: 'sp-status' }, [
-        el('div', { class: 'media-dot', style: { background: '#ff5500', boxShadow: '0 0 6px #ff5500' } }),
-        document.createTextNode('SOUNDCLOUD'),
+        el('div', { class: 'media-dot', style: { background: '#ff8a3d', boxShadow: '0 0 6px #ff8a3d' } }),
+        document.createTextNode('ANY LINK'),
       ]),
     ]),
+    el('div', { class: 'pane-sub', style: { marginBottom: '10px' }, text: 'SoundCloud, YouTube, Vimeo, Spotify, or a direct audio file.' }),
     el('div', { class: 'media-input-row' }, [
       input,
-      el('button', {
-        class: 'btn', text: 'Load',
-        onclick: () => { soundcloudUrl = input.value; draw(soundcloudUrl); },
-      }),
+      el('button', { class: 'btn', text: 'Load', onclick: load }),
     ]),
     frame,
   ]);
