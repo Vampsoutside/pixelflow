@@ -582,6 +582,59 @@ describe('a failed query', () => {
   });
 });
 
+// ── input validation on the plan routes ────────────────────────────────
+
+describe('rejecting an impossible weekday', () => {
+  // The bound lived in the route and nothing tested it. The schema's CHECK
+  // constraint would still stop the write, but it answers 500 rather than 400 —
+  // so removing the guard turns a clear client error into an unhandled one.
+  test('the plan endpoint refuses a weekday outside 0–6', async () => {
+    const c = await signedIn();
+    for (const bad of [7, 8, -1, 99]) {
+      const res = await c.put('/api/study/plan', { weekday: bad, planned_minutes: 60, active: true });
+      assert.equal(res.status, 400, `weekday ${bad} must be a 400, not a crash`);
+      assert.match((await res.json()).error, /weekday/);
+    }
+  });
+
+  test('it refuses a non-integer weekday', async () => {
+    const c = await signedIn();
+    for (const bad of [1.5, 'two', null, undefined, {}]) {
+      const res = await c.put('/api/study/plan', { weekday: bad, planned_minutes: 60, active: true });
+      assert.equal(res.status, 400, `${JSON.stringify(bad)} must be a 400`);
+    }
+  });
+
+  test('plan/all skips an impossible weekday instead of crashing', async () => {
+    const c = await signedIn();
+    const res = await c.put('/api/study/plan/all', {
+      plan: [
+        { weekday: 1, planned_minutes: 90, active: true },
+        { weekday: 7, planned_minutes: 900, active: true },
+      ],
+    });
+    assert.equal(res.status, 200, 'a bad row is skipped, not fatal');
+    const { plan } = await res.json();
+    assert.ok(plan.every((p) => p.weekday >= 0 && p.weekday <= 6), 'no out-of-range weekday may be stored');
+    assert.equal(plan.find((p) => p.weekday === 1)?.planned_minutes, 90, 'the valid row still lands');
+  });
+
+  test('planned minutes are bounded to a real day', async () => {
+    const c = await signedIn();
+    await c.put('/api/study/plan/all', { plan: Array.from({ length: 7 }, (_, d) => ({ weekday: d, planned_minutes: 0, active: false })) });
+    const res = await c.put('/api/study/plan', { weekday: 2, planned_minutes: 99999, active: true });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).minutes, 1440, 'clamped to 24 hours, not stored verbatim');
+  });
+
+  test('a negative figure is not stored', async () => {
+    const c = await signedIn();
+    const res = await c.put('/api/study/plan', { weekday: 2, planned_minutes: -90, active: true });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).minutes, 0, 'a negative plan is zero, not a credit');
+  });
+});
+
 // ── session cookie attributes ────────────────────────────────────────────
 
 describe('the session cookie', () => {

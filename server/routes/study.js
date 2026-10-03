@@ -181,9 +181,15 @@ router.put('/entry', async (req, res) => {
 // ── weekly plan ticks and per-day planned hours ──────────────────────────
 
 router.put('/plan', async (req, res) => {
-  const { weekday, active, planned_minutes: plannedMinutes } = req.body || {};
-  const day = Number(weekday);
-  if (!Number.isInteger(day) || day < 0 || day > 6) {
+  const raw = req.body?.weekday;
+  const { active, planned_minutes: plannedMinutes } = req.body || {};
+  // Number(null) is 0 and Number('') is 0, so a client that sends `weekday: null`
+  // — or omits it entirely, since undefined arrives the same way through a
+  // destructured body — used to be silently written to Sunday instead of being
+  // told the field was wrong. Coerce from the raw value and reject anything
+  // that was not already a number or a clean numeric string.
+  const day = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+  if (typeof day !== 'number' || !Number.isInteger(day) || day < 0 || day > 6) {
     return res.status(400).json({ error: 'weekday must be 0 (Sunday) to 6 (Saturday)' });
   }
 

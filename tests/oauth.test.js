@@ -288,6 +288,16 @@ describe('the callback', () => {
   });
 
   test('derives a username that avoids collisions', async () => {
+    // The account this collides with is created here, not left to an earlier
+    // test. It used to pass only because a previous case had signed up a 'grace'
+    // — so running this one alone failed on its own premise, and the
+    // collision-avoidance logic was tested by accident rather than by setup.
+    const taken = client();
+    await taken('/api/auth/session');
+    await taken.post('/api/auth/signup', {
+      username: 'grace', email: 'taken@example.com', password: 'password123',
+    });
+
     profile = { sub: 'google-sub-clash', email: 'grace@example.com', name: 'Grace' };
     const call = client();
     const start = await call('/api/auth/google/login');
@@ -296,7 +306,7 @@ describe('the callback', () => {
 
     assert.equal(location(res), '/?auth=welcome&provider=google');
     const { user } = await (await call('/api/auth/session')).json();
-    // "grace" is taken, so the name must have been made unique.
+    // "grace" is taken — by the account above — so the name must be unique.
     assert.notEqual(user.username, 'grace');
     assert.match(user.username, /^grace/);
   });
