@@ -55,6 +55,25 @@ test('monthWeeks yields 5 weeks and clips the first and last to the month', () =
   assert.equal(totalDays, daysInMonth(2026, 8));
 });
 
+test('daysInMonth knows February can be 29 days', () => {
+  // daysInMonth was only ever exercised against a September (30 days), so a
+  // version that returned 28 for every February passed the whole suite. A
+  // month-length error of one day silently shifts every date downstream, so
+  // the leap rule is pinned here directly.
+  assert.equal(daysInMonth(2024, 1), 29, '2024 is a leap year');
+  assert.equal(daysInMonth(2028, 1), 29, '2028 is a leap year');
+  assert.equal(daysInMonth(2026, 1), 28, '2026 is not');
+  assert.equal(daysInMonth(2027, 1), 28, '2027 is not');
+  // Century rules: divisible by 400 is a leap year, divisible by 100 is not.
+  assert.equal(daysInMonth(2000, 1), 29, '2000 is divisible by 400');
+  assert.equal(daysInMonth(1900, 1), 28, '1900 is divisible by 100 but not 400');
+
+  // The same rule must hold through the derived week partition, which is what
+  // actually uses it.
+  assert.equal(monthWeeks(2024, 1).reduce((s, w) => s + w.days, 0), 29);
+  assert.equal(monthWeeks(2026, 1).reduce((s, w) => s + w.days, 0), 28);
+});
+
 test('monthWeeks handles a 28-day month that yields only 4 weeks', () => {
   // February 2027 has 28 days and starts on a Monday -> exactly four weeks.
   const weeks = monthWeeks(2027, 1);
