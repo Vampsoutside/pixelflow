@@ -84,13 +84,49 @@ router.get('/overview', async (req, res) => {
   const todayStats = dayTotals(entries, plan, today);
   const weekStats = weekTotals(entries, plan, weekStart(today));
 
+  // Which day the `today` block describes. It can be asked for another one so
+  // the Analytics date picker does not have to refetch the whole overview (and
+  // rebuild every chart) to move a single box — see swapTodayPane.
+  //
+  // A date in a *different month* is refused rather than answered from this
+  // month's rows: monthInputs only loaded this month, so the figures would come
+  // back zero and quietly overwrite the day with a wrong number. The client
+  // switches month first in that case.
+  let focusDate = today;
+  if (req.query.date) {
+    const raw = String(req.query.date).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return res.status(400).json({ error: 'date must look like YYYY-MM-DD' });
+    }
+    try {
+      parseDay(raw);
+    } catch {
+      return res.status(400).json({ error: 'That is not a real calendar date.' });
+    }
+    // Not in the future: logging time you have not studied yet is never a thing.
+    if (raw > todayKey) {
+      return res.status(400).json({ error: 'That day has not happened yet.' });
+    }
+    if (raw.slice(0, 7) !== month) {
+      return res.status(409).json({
+        error: 'That day is in another month.',
+        month: raw.slice(0, 7),
+      });
+    }
+    focusDate = new Date(`${raw}T00:00:00`);
+  }
+  const focusStats = focusDate === today ? todayStats : dayTotals(entries, plan, focusDate);
+
   const summary = monthSummary(entries, plan, year, monthIndex);
   const chart = chartSeries(entries, plan, year, monthIndex,
     req.query.mode === 'weekly' ? 'weekly' : 'daily');
 
   return res.json({
     month,
-    today: { ...decorate(todayStats), date: todayStats.date, active: todayStats.active },
+    // Named `today` because that is what the client's Today pane reads; `date`
+    // carries which day it is actually about, so the client can tell a moved
+    // focus from a stale response.
+    today: { ...decorate(focusStats), date: focusStats.date, active: focusStats.active },
     week: {
       ...decorate(weekStats),
       start: weekStats.start,

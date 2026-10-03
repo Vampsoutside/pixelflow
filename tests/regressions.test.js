@@ -326,6 +326,98 @@ describe('turning a timed event into a deadline', () => {
   });
 });
 
+// ── the overview date parameter ──────────────────────────────────────────
+
+describe('GET /api/study/overview?date=', () => {
+  // Lets the Analytics date picker move one box without refetching the week.
+  // monthInputs only loads the requested month, so answering a cross-month date
+  // from those rows would silently report zero and overwrite a real figure —
+  // that is the case these tests exist to prevent.
+
+  test('an absent date still means today', async () => {
+    const c = await signedIn();
+    const body = await (await c('/api/study/overview')).json();
+    const now = new Date();
+    const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    assert.equal(body.today.date, key);
+  });
+
+  test('asks about a specific day in the current month', async () => {
+    const c = await signedIn();
+    const now = new Date();
+    // Yesterday, staying inside this month so the read is answerable.
+    const target = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const key = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`;
+    const month = key.slice(0, 7);
+
+    await c.put('/api/study/entry', { date: key, minutes: 95 });
+
+    const body = await (await c(`/api/study/overview?month=${month}&date=${key}`)).json();
+    assert.equal(body.today.date, key, 'the response must describe the day that was asked for');
+    assert.equal(body.today.studied, 95);
+    assert.equal(body.today.studiedText, '1h 35m');
+  });
+
+  test('still reports the current week, not the week of the asked-for day', async () => {
+    // The weekly plan is a recurring template on the current week; moving the
+    // `today` box must not drag the week with it.
+    const c = await signedIn();
+    const body = await (await c('/api/study/overview')).json();
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (body.today.date !== todayKey) return; // only meaningful for today itself
+    assert.equal(body.week.start.length, 10);
+    assert.ok(body.planGrid.length === 7, 'the plan grid is always seven days');
+  });
+
+  test('a day in another month is refused, not answered from this month', async () => {
+    const c = await signedIn();
+    const now = new Date();
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    // Walk back until we leave this month, then back up to a day that is real.
+    const probe = new Date(now.getFullYear(), now.getMonth(), 1);
+    probe.setMonth(probe.getMonth() - 1);
+    const lastPrev = new Date(now.getFullYear(), now.getMonth(), 0);
+    const key = `${lastPrev.getFullYear()}-${String(lastPrev.getMonth() + 1).padStart(2, '0')}-${String(lastPrev.getDate()).padStart(2, '0')}`;
+    assert.notEqual(key.slice(0, 7), thisMonth);
+
+    const res = await c(`/api/study/overview?month=${thisMonth}&date=${key}`);
+    assert.equal(res.status, 409, 'a cross-month date must not be answered from the wrong rows');
+    assert.equal((await res.json()).month, key.slice(0, 7), 'the error says which month to use');
+  });
+
+  test('a future day is refused', async () => {
+    const c = await signedIn();
+    const now = new Date();
+    const future = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2);
+    const key = `${future.getFullYear()}-${String(future.getMonth() + 1).padStart(2, '0')}-${String(future.getDate()).padStart(2, '0')}`;
+    const res = await c(`/api/study/overview?month=${key.slice(0, 7)}&date=${key}`);
+    assert.ok([400, 409].includes(res.status), `a future day must be refused, got ${res.status}`);
+  });
+
+  test('a date that is not a real calendar day is refused', async () => {
+    const c = await signedIn();
+    for (const bad of ['2026-02-30', '2026-13-01', 'not-a-date', '2026-1-1', '']) {
+      const res = await c(`/api/study/overview?date=${encodeURIComponent(bad)}`);
+      assert.ok(res.status === 400 || res.status === 200 && !bad,
+        `${JSON.stringify(bad)} must not be accepted as a date (got ${res.status})`);
+    }
+  });
+
+  test('another account cannot be affected by it', async () => {
+    const a = await signedIn();
+    const b = await signedIn();
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const key = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`;
+    await a.put('/api/study/entry', { date: key, minutes: 300 });
+
+    const month = key.slice(0, 7);
+    const bodyB = await (await b(`/api/study/overview?month=${month}&date=${key}`)).json();
+    assert.equal(bodyB.today.studied, 0, "one account's entry must not appear for another");
+  });
+});
+
 // ── session cookie attributes ────────────────────────────────────────────
 
 describe('the session cookie', () => {

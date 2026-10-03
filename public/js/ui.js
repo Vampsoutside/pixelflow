@@ -69,6 +69,92 @@ export function minutesShort(value) {
   return h > 0 ? (r ? `${h}h${r}m` : `${h}h`) : `${r}m`;
 }
 
+// ── hours entered by a person ───────────────────────────────────────────
+
+/**
+ * The number of minutes an hour figure stands for.
+ *
+ * Hours are the unit people think in, but every row in the database is whole
+ * minutes, so this is the single place that conversion happens. Decimals are
+ * the point: 5.5 is 330 minutes, not 5 or 6. Rounded to the nearest minute,
+ * which is the finest grain the ledger can store — a study entry at 0.008h
+ * would otherwise be rounded away by every reader that calls Math.round again.
+ *
+ * Returns null for anything that is not a usable number, so a caller can tell
+ * "they typed nonsense" apart from "they typed zero". `maxHours` bounds the
+ * result to a real day of study.
+ */
+export function hoursToMinutes(hours, { maxHours = 24 } = {}) {
+  if (hours === null || hours === undefined || hours === '') return null;
+  // Routed through the same reader as a typed field so '5,5' means 5.5 here
+  // too — otherwise the form and the converter disagree about the same input.
+  const minutes = parseHoursInput(hours);
+  if (minutes === null || minutes < 0) return null;
+  return Math.min(Math.round(maxHours * 60), minutes);
+}
+
+/** '5,5' -> 5.5. Number() alone returns NaN for a comma decimal. */
+const decimal = (text) => Number(String(text).replace(',', '.'));
+
+/**
+ * Parses what somebody typed into an hours field.
+ *
+ * Accepts the shapes that come up in practice: '5.5', '5,5' (a comma decimal
+ * separator), '5h30', '5h 30m', '2h', '90m', '5:30', and a bare number. Anything
+ * it cannot read returns null so the field can reject it rather than silently
+ * saving a wrong figure.
+ */
+export function parseHoursInput(raw) {
+  if (raw === null || raw === undefined) return null;
+  const text = String(raw).trim().toLowerCase();
+  if (!text) return null;
+
+  const NUM = String.raw`\d+(?:[.,]\d+)?`;
+  // An explicit minute part. The trailing 'm' is optional because people write
+  // '5h30' as often as '5h30m', and making it mandatory silently rejected the
+  // shorter form.
+  const hm = text.match(new RegExp(`^(${NUM})\\s*h(?:ours?)?\\s*(${NUM})?\\s*m?(?:in(?:utes?)?)?$`));
+  if (hm) {
+    const h = decimal(hm[1]);
+    const m = hm[2] === undefined ? 0 : decimal(hm[2]);
+    return Math.round(h * 60 + m);
+  }
+  // Hours on their own: '2h', '2 hours'.
+  const hOnly = text.match(new RegExp(`^(${NUM})\\s*h(?:ours?)?$`));
+  if (hOnly) return Math.round(decimal(hOnly[1]) * 60);
+  // Minutes on their own: '90m', '90 min'. The unit is REQUIRED here — making
+  // it optional would make this pattern swallow every bare number too, and
+  // read '6' as six minutes instead of six hours.
+  const mOnly = text.match(new RegExp(`^(${NUM})\\s*(?:m|min|minute|minutes)$`));
+  if (mOnly) return Math.round(decimal(mOnly[1]));
+
+  // '5:30' — the clock shape people use for "five and a half".
+  const colon = text.match(/^(\d+)\s*:\s*(\d{1,2})$/);
+  if (colon) return Number(colon[1]) * 60 + Number(colon[2]);
+
+  // A bare number, or a decimal with a comma in place of the point.
+  const plain = text.match(new RegExp(`^(${NUM})$`));
+  if (plain) return Math.round(decimal(plain[1]) * 60);
+
+  return null;
+}
+
+/**
+ * The text to put in an hours field for a given number of minutes.
+ *
+ * Whole hours show bare ('8'); anything with a remainder shows up to two
+ * decimals, because 5.5 is exactly what somebody meant and 5.499999 is not.
+ * Zero is '0' rather than blank so the field round-trips: an empty field is
+ * ambiguous between "nothing" and "not filled in yet".
+ */
+export function minutesToHoursValue(minutes) {
+  const m = Math.max(0, Math.round(Number(minutes) || 0));
+  if (m === 0) return '0';
+  // Two decimals is the most a person ever needs, and String() drops the
+  // trailing zeros so '1.5' never renders as '1.50'.
+  return String(Math.round((m / 60) * 100) / 100);
+}
+
 // ── local calendar days ──────────────────────────────────────────────────
 
 /** Local 'YYYY-MM-DD' — deliberately not UTC, because these are study days. */

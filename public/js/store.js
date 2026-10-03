@@ -79,13 +79,21 @@ export function invalidateStudy() {
   studyCache.dirty = true;
 }
 
-export async function fetchOverview({ month, mode } = {}) {
+export async function fetchOverview({ month, mode, date } = {}) {
   const params = new URLSearchParams();
   if (month) params.set('month', month);
   if (mode) params.set('mode', mode);
+  // `date` moves the `today` block to another day in the same month, which is
+  // how the Analytics date picker moves one box without refetching the week.
+  if (date) params.set('date', date);
   const overview = await api.get(`/api/study/overview?${params}`);
-  studyCache.overview = overview;
-  studyCache.dirty = false;
+  // Only a whole-overview read may replace the cached copy: a single-day read
+  // answers the same shape but describes another day, and caching it would
+  // make the footer stats show the wrong date.
+  if (!date) {
+    studyCache.overview = overview;
+    studyCache.dirty = false;
+  }
   return overview;
 }
 

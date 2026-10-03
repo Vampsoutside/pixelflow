@@ -1,10 +1,31 @@
-import { el, minutes, minutesShort, dayKey, monthKey, addDays, toast } from '../ui.js';
+import {
+  el, minutes, minutesShort, dayKey, monthKey, addDays, toast,
+  parseHoursInput, minutesToHoursValue,
+} from '../ui.js';
 import { store, studyCache, fetchOverview, fetchInsights, invalidateStudy, updateSetting } from '../store.js';
 import { api } from '../api.js';
 import { drawChart, drawHeatmap, drawCumulative } from '../study/chart.js';
 
 let state = null;
 let host = null;
+/** The pane currently holding the TODAY section, so it can be swapped in place. */
+let todaySlot = null;
+/**
+ * The Monday key the weekly plan on screen was built from.
+ *
+ * The plan is a recurring template, not a per-week record, so it only needs
+ * refetching when the week rolls over. Tracked here so a full reload happens
+ * once, on the turn, instead of on every date pick.
+ */
+let planWeekKey = null;
+
+/** The Monday of the week containing 'YYYY-MM-DD'. */
+function mondayOf(dateKey) {
+  const d = new Date(`${dateKey}T00:00:00`);
+  const shift = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - shift);
+  return dayKey(d);
+}
 
 export const analyticsSection = {
   async mount(container) {
@@ -14,10 +35,62 @@ export const analyticsSection = {
       mode: store.view.chartMode || 'daily',
       date: dayKey(),
     };
+    planWeekKey = mondayOf(state.date);
     await reload();
   },
   reload: () => reload(),
+  unmount() { todaySlot = null; },
 };
+
+/**
+ * Moves only the TODAY pane to a different day.
+ *
+ * One narrow read, and only the first box is replaced — the weekly plan, the
+ * month and the heatmaps keep the nodes they already have, so a date pick costs
+ * one request and one swap instead of a full re-render.
+ *
+ * The plan is refetched only if the pick crossed a week boundary, which is the
+ * one case where the rows behind it really can differ.
+ */
+async function swapTodayPane(dateKey) {
+  if (!host || !state) return;
+  const crossedWeek = mondayOf(dateKey) !== planWeekKey;
+  if (crossedWeek) {
+    planWeekKey = mondayOf(dateKey);
+    await reload();
+    return;
+  }
+
+  // A day in another month needs a different month's rows, which this month's
+  // read cannot answer. Switch the month and take the full reload with it.
+  if (dateKey.slice(0, 7) !== state.month) {
+    state.month = dateKey.slice(0, 7);
+    store.view.month = state.month;
+    await reload();
+    return;
+  }
+
+  let day;
+  try {
+    // A one-day read, not the whole overview: the week, month and heatmaps on
+    // screen are still correct for a date inside the current week.
+    ({ today: day } = await fetchOverview({ month: state.month, mode: state.mode, date: dateKey }));
+  } catch (err) {
+    toast(err.message || 'Could not load that day', 3000);
+    return;
+  }
+  // The server echoes the day it answered for, so a response that arrived after
+  // the picker moved again cannot paint the wrong box.
+  if (day.date !== state.date) return;
+
+  const next = todayPane(day);
+  if (todaySlot?.parentNode && next) {
+    todaySlot.replaceWith(next);
+    todaySlot = next;
+  } else {
+    await reload();
+  }
+}
 
 async function reload() {
   if (!host || !state) return;
@@ -47,15 +120,24 @@ async function reload() {
   }
 
   host.innerHTML = '';
-  host.append(todayPane(data), weekPane(data), monthPane(data), insightsPane(insights));
+  todaySlot = null;
+  const today = todayPane(data.today);
+  todaySlot = today;
+  host.append(today, weekPane(data), monthPane(data), insightsPane(insights));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  TODAY — date, hours entered, and the planned-vs-actual bar
 // ═══════════════════════════════════════════════════════════════════════════
 
-function todayPane(data) {
-  const today = data.today;
+/**
+ * The TODAY pane.
+ *
+ * Takes the day block itself rather than the whole overview: that is all it
+ * reads, and it lets swapTodayPane() hand over a single-day read without
+ * having to reshape it.
+ */
+function todayPane(today) {
   const planned = today.planned;
   const ratio = planned > 0 ? today.studied / planned : 0;
 
@@ -75,10 +157,23 @@ function todayPane(data) {
   let draft = today.studied;
   const stepperValue = el('div', { class: 'stepper-val', text: minutesShort(draft) });
 
+  // Hours, with decimals: '5.5' is 330 minutes. Committed explicitly by the
+  // Save button rather than on blur, because this is a logged figure — a
+  // stray blur must not write a correction somebody did not mean.
+  const studiedField = hoursField({
+    value: draft,
+    label: `Hours studied on ${state.date}`,
+    className: 'studied-edit',
+    onCommit: (next) => { setDraft(next); },
+  });
+
   /** Live preview so the bar answers before the save round trip completes. */
   function setDraft(next) {
     draft = Math.max(0, Math.min(24 * 60, next));
     stepperValue.textContent = minutesShort(draft);
+    // Keep the typed figure in step, so the +/- buttons and the field never
+    // disagree about what is about to be saved.
+    studiedField.set(draft);
     const previewRatio = planned > 0 ? draft / planned : 0;
     studiedNode.textContent = minutes(draft);
     barFill.style.width = `${Math.min(100, previewRatio * 100)}%`;
@@ -88,12 +183,18 @@ function todayPane(data) {
   }
 
   async function save() {
+    // Anything typed but not yet committed is folded into the draft first, so
+    // Save never silently ignores what is in the box.
+    studiedField.commit();
     saveBtn.disabled = true;
     try {
       await api.put('/api/study/entry', { date: state.date, minutes: draft });
       invalidateStudy();
       toast(`Logged ${minutesShort(draft)} for ${state.date}`);
-      await reload();
+      // No reload(): the field, the bar and the footer numbers are already
+      // showing the saved figure, and a re-render would throw away the scroll
+      // position and rebuild every chart for a change visible on screen.
+      today.studied = draft;
       window.dispatchEvent(new CustomEvent('pixelflow:stats'));
     } catch (err) {
       saveBtn.disabled = false;
@@ -141,9 +242,17 @@ function todayPane(data) {
           type: 'date',
           value: state.date,
           max: dayKey(addDays(new Date(), 1)),
-          onchange: async (event) => {
-            state.date = event.target.value || dayKey();
-            await reload();
+          onchange: (event) => {
+            const next = event.target.value || dayKey();
+            // Switching day only moves the TODAY pane. It used to call
+            // reload(), which refetched the overview and rebuilt every pane —
+            // so moving the date visibly refreshed the weekly plan and threw
+            // away the scroll position for a change that only concerns one box.
+            // The plan is a recurring weekly template, so it cannot have
+            // changed; it is refreshed when the week itself turns over.
+            if (next === state.date) return;
+            state.date = next;
+            swapTodayPane(next);
           },
         }),
         el('div', { class: 'field-label', style: { marginTop: '16px' }, text: 'Hours studied' }),
@@ -154,6 +263,12 @@ function todayPane(data) {
             el('button', { text: '+', title: '15 minutes more', 'aria-label': 'Add 15 minutes', onclick: () => setDraft(draft + 15) }),
           ]),
           saveBtn,
+        ]),
+        // Hours with decimals, alongside the +/- stepper: 5.5 is 5 hours 30
+        // minutes. The stepper is for nudging, the field is for an exact figure.
+        el('div', { class: 'studied-hours' }, [
+          el('span', { class: 'pane-sub', text: 'or type hours' }),
+          studiedField.node,
         ]),
         el('div', { class: 'preset-mins' },
           [30, 60, 90, 120, 180].map((m) => el('button', {
@@ -184,6 +299,104 @@ function todayPane(data) {
       ]),
     ]),
   ]);
+}
+
+/**
+ * A text field that takes hours, decimals and all.
+ *
+ * The plan rows and the manual "hours studied" box both edit minutes, but
+ * minutes are not what anyone thinks in: a 330-minute figure has to be read as
+ * five and a half hours. So the field is text, not `type=number` (which cannot
+ * hold '5h30' and silently drops a trailing decimal point), and it echoes the
+ * figure back in hours with the minutes spelled out beside it.
+ *
+ * commit() returns the parsed minutes, or null if the text could not be read —
+ * callers treat null as "rejected" and leave the stored value alone.
+ */
+function hoursField({ value, label, onCommit, disabled = false, className = '' }) {
+  const input = el('input', {
+    class: `plan-edit ${className}`.trim(),
+    type: 'text',
+    inputmode: 'decimal',
+    autocomplete: 'off',
+    value: minutesToHoursValue(value),
+    placeholder: '0',
+    'aria-label': label,
+    title: 'Hours. Decimals work — 5.5 means 5 hours 30 minutes.',
+  });
+  input.disabled = disabled;
+
+  // What is actually stored, as opposed to what is typed. Tracked separately so
+  // Escape can put back the last committed figure: reading it from the DOM
+  // would restore whatever half-typed text happens to be there.
+  let stored = value;
+
+  // Shows what the typed figure actually means, so a half hour is never a
+  // guess: 5.5 reads as '5h 30m' the moment it is typed.
+  const echo = el('div', { class: 'plan-edit-cap', text: minutes(value) });
+
+  /** Returns the parsed minutes, or null when the text is unusable. */
+  function commit() {
+    const text = input.value.trim();
+    if (!text) { reset(); return null; }
+    const parsed = parseHoursInput(text);
+    if (parsed === null) {
+      // Shown in the field and left for correction, rather than saved as zero.
+      input.classList.add('bad');
+      input.title = 'Could not read that. Try 5.5, 5h30, or 5:30.';
+      return null;
+    }
+    input.classList.remove('bad');
+    input.title = 'Hours. Decimals work — 5.5 means 5 hours 30 minutes.';
+    const bounded = Math.min(24 * 60, parsed);
+    stored = bounded;
+    input.value = minutesToHoursValue(bounded);
+    echo.textContent = minutes(bounded);
+    onCommit(bounded);
+    return bounded;
+  }
+
+  /** Puts the field back to the last committed figure and clears any error. */
+  function reset() {
+    input.classList.remove('bad');
+    input.title = 'Hours. Decimals work — 5.5 means 5 hours 30 minutes.';
+    input.value = minutesToHoursValue(stored);
+    echo.textContent = minutes(stored);
+  }
+
+  // Set by Escape and consumed by the blur that follows it, so abandoning an
+  // edit does not immediately commit the value it just restored.
+  let abandoned = false;
+
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); commit(); input.blur(); }
+    if (event.key === 'Escape') {
+      // Abandon the edit and put back whatever was stored.
+      event.preventDefault();
+      abandoned = true;
+      reset();
+      input.blur();
+    }
+  });
+  input.addEventListener('blur', () => {
+    if (abandoned) { abandoned = false; return; }
+    commit();
+  });
+
+  return {
+    node: el('div', { class: 'hours-field' }, [input, echo]),
+    input,
+    /** Re-reads the stored value without committing — used when the server corrects it. */
+    set: (next) => {
+      stored = next;
+      if (document.activeElement !== input) {
+        input.value = minutesToHoursValue(next);
+        echo.textContent = minutes(next);
+      }
+    },
+    commit,
+    reset,
+  };
 }
 
 function fillClass(ratio, planned) {
@@ -228,21 +441,9 @@ function weekPane(data) {
     const barWidth = day.planned > 0 ? Math.min(100, (day.studied / day.planned) * 100) : 0;
 
     // The hours are an editable field, not a read-out: clicking it turns the
-    // value into a number input so a day can be set to an exact figure rather
-    // than only reached by repeated 30-minute steps. Enter or blur commits,
-    // Escape abandons.
-    const plannedInput = el('input', {
-      class: 'stepper-val plan-edit',
-      type: 'number',
-      min: '0',
-      max: '1440',
-      step: '15',
-      inputmode: 'numeric',
-      value: String(day.active ? day.planned : 0),
-      'aria-label': `Planned minutes on ${day.label}`,
-      title: 'Click to type exact planned minutes',
-    });
-    plannedInput.disabled = !day.active;
+    // value into something you can type into, and hoursField converts whatever
+    // is typed — 5.5, 5h30, 5:30 — into whole minutes before anything is sent.
+    // Enter or blur commits, Escape abandons.
     const tick = el('div', {
       class: 'plan-tick',
       role: 'checkbox',
@@ -252,21 +453,30 @@ function weekPane(data) {
       text: day.active ? '✓' : '',
     });
 
-    // Replaces the read-out: the input shows exact minutes, the caption beside
-    // it shows the same figure in human form so the unit is never ambiguous.
-    const caption = el('div', { class: 'plan-edit-cap', text: day.active ? hours(day.planned) : '' });
-
     // Optimistic state for this row, so rapid clicks accumulate instead of
     // fighting over the stale server value.
     let planned = day.planned;
     let active = day.active;
 
+    // Typing here writes through: hoursField has already turned '5.5' into 330.
+    const field = hoursField({
+      value: day.active ? day.planned : 0,
+      label: `Planned hours on ${day.label}`,
+      disabled: !day.active,
+      onCommit: (next) => {
+        if (next === planned && active) return;
+        planned = next;
+        active = true;
+        paintOptimistic();
+        patch({ planned_minutes: planned, active: true });
+      },
+    });
+
     function paintOptimistic() {
       tick.textContent = active ? '✓' : '';
       tick.setAttribute('aria-checked', String(active));
-      plannedInput.disabled = !active;
-      if (document.activeElement !== plannedInput) plannedInput.value = String(active ? planned : 0);
-      caption.textContent = active ? hours(planned) : '';
+      field.input.disabled = !active;
+      field.set(active ? planned : 0);
       const row = tick.closest('.plan-row');
       row?.classList.toggle('active', active);
       row?.classList.toggle('rest', !active);
@@ -290,25 +500,6 @@ function weekPane(data) {
         );
       }
     }
-
-    // Commit a typed figure. Clamped to a day, and a blank or nonsense entry
-    // falls back to the value already on screen rather than writing zero.
-    function commitTyped() {
-      const typed = Number(plannedInput.value);
-      if (!Number.isFinite(typed)) { plannedInput.value = String(active ? planned : 0); return; }
-      const next = Math.max(0, Math.min(24 * 60, Math.round(typed)));
-      if (next === planned && active) return;
-      planned = next;
-      active = true;
-      paintOptimistic();
-      patch({ planned_minutes: planned, active: true });
-    }
-
-    plannedInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') { event.preventDefault(); commitTyped(); plannedInput.blur(); }
-      if (event.key === 'Escape') { event.preventDefault(); plannedInput.value = String(planned); plannedInput.blur(); }
-    });
-    plannedInput.addEventListener('blur', commitTyped);
 
     // One request at a time per row, with clicks that landed mid-flight queued
     // behind it, so hammering + cannot reorder the writes.
@@ -378,7 +569,7 @@ function weekPane(data) {
               patch({ planned_minutes: planned, active: true });
             },
           }),
-          plannedInput,
+          field.node,
           el('button', {
             text: '+', 'aria-label': `More planned time on ${day.label}`,
             onclick: () => {
@@ -389,7 +580,6 @@ function weekPane(data) {
             },
           }),
         ]),
-        caption,
       ]),
       el('div', {
         class: `plan-actual${fill === 'met' ? ' met' : ''}`,

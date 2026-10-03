@@ -83,27 +83,43 @@
 .plan-row .stepper .stepper-val { min-width: 40px; font-size: 17px; }
 .plan-row .stepper button { width: 20px; height: 20px; font-size: 13px; }
 .plan-row.rest .stepper { opacity: .3; pointer-events: none; }
-/* The planned-minutes field is directly editable. Native spinners are hidden
-   because the +/- buttons either side already step it, and the number input
-   inherits the read-out styling so editing does not change the row's shape. */
+
+/* Hours-with-decimals field. A text input rather than type=number: it has to
+   accept '5.5', '5h30' and '5:30', none of which a number field will hold
+   without silently mangling the value. */
+.hours-field { display: flex; align-items: center; gap: 5px; }
 .plan-edit {
   width: 52px; text-align: center;
-  background: transparent; border: 1px solid transparent; border-radius: 4px;
-  color: inherit; font-family: inherit; font-size: 17px;
-  -moz-appearance: textfield;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text); font-family: var(--numeric); font-size: 13px;
+  padding: 3px 4px;
+  transition: border-color .15s, box-shadow .15s;
 }
-.plan-edit::-webkit-outer-spin-button,
-.plan-edit::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .plan-edit:hover:not(:disabled) { border-color: var(--border2); }
 .plan-edit:focus {
-  border-color: var(--accent); background: var(--surface2);
-  outline: none; box-shadow: 0 0 0 2px var(--accent-soft, rgba(124,111,255,.2));
+  border-color: var(--accent); background: var(--surface3);
+  outline: none; box-shadow: 0 0 0 2px rgba(124, 111, 255, .25);
 }
-.plan-edit:disabled { opacity: .55; cursor: default; }
+/* A figure that could not be read. Left in the field for correction rather
+   than being saved as a wrong number. */
+.plan-edit.bad {
+  border-color: var(--accent2);
+  box-shadow: 0 0 0 2px rgba(255, 107, 107, .22);
+}
+.plan-edit:disabled { opacity: .45; cursor: default; }
+
+/* What the typed figure means, in the units the rest of the app uses. */
 .plan-edit-cap {
-  min-width: 34px; font-size: 10px; color: var(--muted);
+  min-width: 42px; font-size: 10px; color: var(--muted);
   text-align: left; white-space: nowrap;
 }
+
+/* The "or type hours" line under Hours studied. */
+.studied-hours {
+  display: flex; align-items: center; gap: 9px;
+  margin-top: 9px;
+}
+.studied-hours .plan-edit { width: 64px; font-size: 15px; }
 .plan-actual { font-size: 10px; color: var(--muted); text-align: right; white-space: nowrap; }
 .plan-actual.met { color: var(--good); }
 
