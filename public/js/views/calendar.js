@@ -1,6 +1,7 @@
 import { el, minutes, minutesShort, dayKey, parseDay, toast } from '../ui.js';
 import { store, fetchOverview, invalidateStudy } from '../store.js';
 import { api } from '../api.js';
+import { refreshStatus, push as pushToGoogle, gcalBar } from '../gcal.js';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -28,6 +29,7 @@ export const calendarSection = {
       year: today.getFullYear(),
       selected: dayKey(today),
     };
+    await refreshStatus();
     await load();
   },
   sidePanel: calendarSidePanel,
@@ -133,6 +135,13 @@ function render(planByWeekday) {
   };
 
   host.innerHTML = '';
+  // Recreated on every render so the strip reflects a connect or disconnect
+  // made since the last paint, and always bound to the month on screen —
+  // syncing a month the user is not looking at would be baffling.
+  // load() re-fetches and re-renders, which is what picks up whatever the sync
+  // brought in. planByWeekday is built inside load(), so there is nothing here
+  // to recompute by hand.
+  const bar = gcalBar(`${state.year}-${String(state.month + 1).padStart(2, '0')}`, () => load());
   host.append(el('div', { class: 'pane' }, [
     el('div', { class: 'cal-header' }, [
       el('div', { class: 'cal-month-lbl', text: `${MONTHS[state.month]} ${state.year}` }),
@@ -141,6 +150,7 @@ function render(planByWeekday) {
         el('button', { text: '›', 'aria-label': 'Next month', onclick: () => shift(1) }),
       ]),
     ]),
+    bar.node,
     el('div', { class: 'chart-legend', style: { marginBottom: '10px' } }, [
       el('span', {}, [el('i', { class: 'legend-swatch', style: { background: 'rgba(124,111,255,.5)' } }), 'Study log']),
       el('span', {}, [el('i', { class: 'legend-swatch', style: { background: 'rgba(107,255,218,.5)' } }), 'Hit the target']),
@@ -255,8 +265,13 @@ async function saveItem(draft, { id = null } = {}) {
   payload.time = draft.kind === 'event' ? (draft.time || '') : '';
   payload.minutes = draft.kind === 'event' ? Number(draft.minutes) || 0 : 0;
 
-  if (id) await api.put(`/api/events/${id}`, payload);
-  else await api.post('/api/events', payload);
+  // An edit already knows its own id; only a create has to read it back from
+  // the POST response. (PUT returns the refreshed month, not the row, so
+  // relying on the response there would silently never push.)
+  const saved = id ? await api.put(`/api/events/${id}`, payload) : await api.post('/api/events', payload);
+  // Fired without awaiting so the calendar redraws immediately instead of
+  // waiting on a call to a third party.
+  pushToGoogle(id || saved?.id);
   await load();
   if (panel) calendarSidePanel(panel);
   window.dispatchEvent(new CustomEvent('pixelflow:stats'));

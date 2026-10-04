@@ -1,5 +1,6 @@
 import { api, ApiError } from './api.js';
 import { consentDecided, openConsentBanner } from './consent.js';
+import { reportOAuthReturn } from './gcal.js';
 import { store, setUser, subscribe, fetchOverview } from './store.js';
 import { el, $, $$, toast, minutesShort, formatRelative } from './ui.js';
 import { drawPose } from './avatar.js';
@@ -53,6 +54,10 @@ function wireConsent() {
 
 async function boot() {
   initParticles();
+  // Before anything renders: strips the ?gcal= marker Google sent us back with
+  // and says what happened, so the message is the first thing seen rather than
+  // arriving after the calendar has painted.
+  reportOAuthReturn();
   wireSidebar();
   wireAvatarChrome();
 

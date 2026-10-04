@@ -272,3 +272,29 @@
 .setting-label { font-size: 12px; }
 .setting-hint { font-size: 10px; color: var(--muted2); margin-top: 2px; line-height: 1.4; }
 .setting-val { font-size: 12px; color: var(--accent); font-weight: 600; min-width: 46px; text-align: center; }
+
+/* Google Calendar connection strip. Sits above the calendar legend so the
+   connect affordance is visible without scrolling past a month grid. */
+.gcal-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm, 8px);
+  background: var(--surface2, transparent);
+}
+.gcal-status {
+  font-size: 10px;
+  letter-spacing: .08em;
+  color: var(--muted, var(--muted-foreground));
+  margin-right: auto;
+}
+.gcal-connect {
+  border-color: var(--accent);
+}
+.gcal-sync {
+  min-width: 68px;
+}

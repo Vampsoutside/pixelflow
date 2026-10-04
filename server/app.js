@@ -12,6 +12,7 @@ import tasksRoutes from './routes/tasks.js';
 import eventsRoutes from './routes/events.js';
 import tagsRoutes from './routes/tags.js';
 import spotifyRoutes from './routes/spotify.js';
+import googleCalendarRoutes from './routes/googlecalendar.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const PUBLIC_DIR = join(here, '..', 'public');
@@ -111,6 +112,7 @@ app.use('/api/tasks', tasksRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/tags', tagsRoutes);
 app.use('/api/spotify', spotifyRoutes);
+app.use('/api/googlecalendar', googleCalendarRoutes);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'No such endpoint' }));
 

@@ -156,6 +156,32 @@ CREATE TABLE IF NOT EXISTS spotify_tokens (
 
 -- Short-lived state for the OAuth CSRF check. Rows older than 10 minutes are
 -- treated as expired and ignored.
+-- Google Calendar connection. Same shape as spotify_tokens: the refresh token
+-- is the durable half, the access token is disposable and renewed on demand.
+CREATE TABLE IF NOT EXISTS google_calendar_tokens (
+  user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  access_token  TEXT,
+  refresh_token TEXT NOT NULL,
+  expires_at    INTEGER NOT NULL,
+  calendar_id   TEXT    NOT NULL DEFAULT 'primary'
+);
+
+-- Which local event is which Google event.
+--
+-- Kept in its own table rather than a column on events so that adding this
+-- feature does not need an ALTER, and so a user who disconnects loses the
+-- linkage (so their next edit creates a fresh Google event) while keeping every
+-- local event. google_updated is what a pull compares against to decide which
+-- side changed last.
+CREATE TABLE IF NOT EXISTS google_event_links (
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  local_event_id  INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  google_event_id TEXT    NOT NULL,
+  google_updated  TEXT,
+  PRIMARY KEY (user_id, local_event_id),
+  UNIQUE (user_id, google_event_id)
+);
+
 CREATE TABLE IF NOT EXISTS oauth_states (
   state     TEXT PRIMARY KEY,
   user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

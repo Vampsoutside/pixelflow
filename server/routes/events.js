@@ -3,6 +3,7 @@ import { db, localDate } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { eventsBetween } from '../store.js';
 import { parseDay, dayKey } from '../metrics.js';
+import { unlinkRemote } from './googlecalendar.js';
 
 /**
  * Events and deadlines.
@@ -181,6 +182,16 @@ router.delete('/:id', async (req, res) => {
   const existing = await db.prepare('SELECT * FROM events WHERE id = ? AND user_id = ?')
     .get(id, req.user.id);
   if (!existing) return res.status(404).json({ error: 'No such item' });
+
+  // If this event also lives in a connected Google Calendar, remove it there
+  // first. This has to happen before the local delete: the link that records
+  // the Google id is ON DELETE CASCADE, so once the row goes the mapping is
+  // gone and the Google copy would survive and reappear on the next sync.
+  //
+  // A failed upstream delete is not fatal. The user's own event is being
+  // removed and must stay removed; the orphaned Google event is reconciled by
+  // the next pull, which is a better outcome than refusing to delete locally.
+  await unlinkRemote(req.user.id, id);
 
   await db.prepare('DELETE FROM events WHERE id = ? AND user_id = ?').run(id, req.user.id);
   const { from, to } = monthBounds(existing.date.slice(0, 7));
