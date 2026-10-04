@@ -262,21 +262,31 @@ describe('deleting an account', () => {
 });
 
 describe('the legal pages google asks for', () => {
-  test('/privacy is public and mentions the data we actually hold', async () => {
+  test('/privacy is the policy, not the app shell', async () => {
     const res = await fetch(`${base}/privacy`);
     assert.equal(res.status, 200);
-    const body = (await res.text()).toLowerCase();
+    const body = await res.text();
+    // Checking for words like "study" is not enough: the single-page app's own
+    // markup contains them, so a test that only looks for them passes while the
+    // route serves the app shell. Assert on something only the policy has.
+    assert.ok(body.includes('Privacy Policy'), 'the privacy page, not index.html');
+    assert.ok(!body.includes('<div id="root"'), 'must not be the SPA shell');
+
+    const lower = body.toLowerCase();
     // The categories the schema really contains. A policy that says only
     // "we store your data" satisfies nobody and fails review.
-    for (const term of ['study', 'calendar', 'spotify', 'email', 'delete', 'password']) {
-      assert.ok(body.includes(term), `the policy should mention ${term}`);
+    for (const term of ['calendar', 'spotify', 'scrypt', 'delete your account', 'cookie']) {
+      assert.ok(lower.includes(term), `the policy should mention ${term}`);
     }
   });
 
-  test('/terms is public', async () => {
+  test('/terms is the terms page, not the app shell', async () => {
     const res = await fetch(`${base}/terms`);
     assert.equal(res.status, 200);
-    assert.ok((await res.text()).length > 500);
+    const body = await res.text();
+    assert.ok(body.includes('Terms of Use'), 'the terms page, not index.html');
+    assert.ok(!body.includes('<div id="root"'), 'must not be the SPA shell');
+    assert.ok(body.length > 2000);
   });
 
   test('both are reachable without signing in', async () => {

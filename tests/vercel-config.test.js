@@ -14,7 +14,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -35,6 +35,10 @@ const sourceOf = (destination) => rewrites.find((r) => r.destination === destina
 const MATCHERS = {
   '/api/(.*)': (path) => path === '/api' || path.startsWith('/api/'),
   '/((?!api/).*)': (path) => !path.startsWith('/api/'),
+  // Explicit single-path rewrites to the function, for the pages that must not
+  // be swallowed by the SPA catch-all.
+  '/privacy': (path) => path === '/privacy',
+  '/terms': (path) => path === '/terms',
 };
 
 function matches(source, path) {
@@ -91,5 +95,37 @@ describe('vercel.json', () => {
 
   test('static assets are served from public', () => {
     assert.equal(config.outputDirectory, 'public');
+  });
+
+  test('the privacy policy is not swallowed by the SPA catch-all', () => {
+    // Google requires a publicly reachable privacy policy at a URL on the
+    // verified domain. The app-shell rewrite matches every non-API path, so
+    // without an explicit rule ahead of it, /privacy returns the SPA HTML with
+    // a 200 — which looks fine to a status check and fails review outright.
+    const shell = sourceOf('/index.html');
+    assert.ok(shell, 'expected the SPA catch-all');
+
+    const legal = ['/privacy', '/terms'];
+    for (const path of legal) {
+      const explicit = rewrites.find((r) => r.source === path);
+      assert.ok(explicit, `${path} needs its own rewrite to the function`);
+      assert.equal(explicit.destination, '/api/index', `${path} should reach the server`);
+    }
+
+    // And the explicit rules must come first, or the catch-all wins.
+    const firstShell = rewrites.findIndex((r) => r.destination === '/index.html');
+    for (const path of legal) {
+      const at = rewrites.findIndex((r) => r.source === path);
+      assert.ok(at < firstShell, `${path} must be declared before the SPA catch-all`);
+    }
+  });
+
+  test('the legal pages exist in the output directory', () => {
+    // A rewrite pointing at a file that is not deployed serves nothing useful,
+    // and the config test alone would still pass.
+    for (const file of ['privacy.html', 'terms.html']) {
+      const p = join(root, 'public', file);
+      assert.ok(existsSync(p), `public/${file} must exist to be served`);
+    }
   });
 });
