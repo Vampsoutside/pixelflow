@@ -1,6 +1,6 @@
 import { el, toast, minutes } from '../ui.js';
 import { api } from '../api.js';
-import { store } from '../store.js';
+import { store, updateSetting } from '../store.js';
 import {
   spotifyConfig, spotifyStatus, initSpotify, paintDock, bindDock,
 } from '../media/spotify.js';
@@ -35,6 +35,9 @@ async function render() {
       spotifyPane(config, connected),
       otherMediaPane(),
     ]),
+    // The always-playable embed: present on a first visit with nothing set up,
+    // and the same pane a saved playlist is loaded into.
+    playlistPane(),
     soundPane(),
   );
 
@@ -176,6 +179,121 @@ function connectPlayer() {
     },
     onError: (message) => toast(message, 4200),
   }).catch((err) => toast(err.message || 'Spotify failed to start', 4200));
+}
+
+/**
+ * The playlist the Media tab opens with.
+ *
+ * Shown before the visitor has connected anything or pasted a link of their
+ * own, so the pane is never an empty box on a first visit. It is an ordinary
+ * public embed and can be replaced below — see playlistPane().
+ */
+const DEFAULT_PLAYLIST = '3mqtl1bFazmX5lpULhjBkV';
+
+/**
+ * The user's own playlist or track, remembered between visits.
+ *
+ * Stored in their account settings rather than module state so it follows them
+ * across devices, which is the same reason the rest of the app persists here.
+ */
+const savedPlaylist = () => (store.user?.settings?.spotifyPlaylist) || '';
+
+function playlistPane() {
+  const current = savedPlaylist() || DEFAULT_PLAYLIST;
+  const frame = el('div');
+
+  const draw = (id) => {
+    const embed = id ? embedFor(`https://open.spotify.com/playlist/${id}`) : null;
+    frame.innerHTML = '';
+    if (!embed) {
+      frame.append(el('div', { class: 'media-placeholder', text: 'That playlist link could not be read.' }));
+      return;
+    }
+    frame.append(el('div', { class: 'player-shell' }, [
+      el('iframe', {
+        src: embed.src,
+        height: '352',
+        frameborder: '0',
+        allowfullscreen: '',
+        allow: 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture',
+        loading: 'lazy',
+        title: 'Spotify playlist',
+      }),
+    ]));
+  };
+
+  /**
+   * Accepts what people actually paste: a share link, a bare playlist or track
+   * id, or an /embed/ URL. embedFor() does the parsing for everything else, so
+   * a Spotify link is handled identically here and in Other Media.
+   */
+  const idFrom = (raw) => {
+    const text = String(raw || '').trim();
+    if (!text) return null;
+    const full = embedFor(text);
+    if (full?.src?.includes('open.spotify.com/embed')) {
+      return full.src.match(/embed\/[^/]+\/([a-zA-Z0-9]+)/)?.[1] ?? null;
+    }
+    // A bare id, with no URL around it.
+    const bare = text.match(/^([a-zA-Z0-9]{20,})$/);
+    return bare ? bare[1] : null;
+  };
+
+  const input = el('input', {
+    class: 'inp',
+    placeholder: 'Paste a Spotify playlist or track link…',
+    'aria-label': 'Spotify playlist or track link',
+  });
+  input.value = savedPlaylist();
+
+  const load = async () => {
+    const id = idFrom(input.value);
+    if (!id) {
+      toast('That does not look like a Spotify link', 3000);
+      return;
+    }
+    // Remembered only once the link parses, so a typo cannot replace a
+    // working playlist with something that will not load.
+    try {
+      await updateSetting('spotifyPlaylist', id);
+      draw(id);
+    } catch {
+      draw(id);
+      toast('Saved for now, but could not be stored on your account', 3200);
+    }
+  };
+
+  input.addEventListener('keydown', (event) => { if (event.key === 'Enter') load(); });
+
+  draw(current);
+
+  return el('div', { class: 'pane' }, [
+    el('div', { class: 'pane-hd' }, [
+      el('div', { class: 'pane-title', text: 'PLAYLIST' }),
+      el('div', { class: 'sp-status' }, [
+        el('div', { class: 'media-dot', style: { background: '#1db954', boxShadow: '0 0 6px #1db954' } }),
+        document.createTextNode('SPOTIFY'),
+      ]),
+    ]),
+    el('div', { class: 'pane-sub', style: { marginBottom: '10px' }, text: 'Playing here by default. Paste a link to swap it for your own — it is saved to your account.' }),
+    el('div', { class: 'media-input-row' }, [
+      input,
+      el('button', { class: 'btn', text: 'Load', onclick: load }),
+      savedPlaylist()
+        ? el('button', {
+          class: 'btn',
+          text: 'Default',
+          title: 'Go back to the playlist this tab opens with',
+          onclick: async () => {
+            input.value = '';
+            try { await updateSetting('spotifyPlaylist', ''); } catch { /* still shown for now */ }
+            draw(DEFAULT_PLAYLIST);
+          },
+        })
+        : null,
+    ]),
+    frame,
+  ]);
 }
 
 // ── other media ──────────────────────────────────────────────────────────
