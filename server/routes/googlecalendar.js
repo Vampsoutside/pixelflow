@@ -26,6 +26,7 @@
 import { asyncRouter } from '../http.js';
 import { db } from '../db.js';
 import { requireAuth, newState, verifyState } from '../auth.js';
+import { publicOrigin } from '../oauth.js';
 
 const router = asyncRouter();
 
@@ -33,8 +34,11 @@ const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
 export const PORT = Number(process.env.PORT) || 5173;
+// From PUBLIC_ORIGIN when deployed — see the note in oauth.js#publicOrigin.
+// A loopback default here tells Google the callback is at 127.0.0.1 on Vercel
+// and the request is rejected with redirect_uri_mismatch.
 export const REDIRECT_URI = process.env.GOOGLE_CALENDAR_REDIRECT_URI
-  || `http://127.0.0.1:${PORT}/api/googlecalendar/callback`;
+  || `${publicOrigin()}/api/googlecalendar/callback`;
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';

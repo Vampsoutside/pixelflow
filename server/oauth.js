@@ -76,9 +76,25 @@ export function availableProviders() {
 export function redirectUri(provider) {
   const explicit = process.env[`${provider.toUpperCase()}_REDIRECT_URI`];
   if (explicit) return explicit;
+  return `${publicOrigin()}/api/auth/${provider}/callback`;
+}
+
+/**
+ * The origin the outside world can reach this app on.
+ *
+ * PUBLIC_ORIGIN rather than the request, because a proxy sits in front on
+ * Vercel and the Host it forwards is not necessarily the public hostname.
+ *
+ * The loopback fallback is for local development only. PORT is *also* set on
+ * Vercel — to an internal port — so any callback that falls back to
+ * http://127.0.0.1:<PORT> in a deploy produces a redirect_uri the provider has
+ * never seen, and the connection fails with redirect_uri_mismatch while working
+ * perfectly on a laptop. Every provider's callback should come from here.
+ */
+export function publicOrigin() {
   const port = Number(process.env.PORT) || 5173;
   const origin = process.env.PUBLIC_ORIGIN || `http://127.0.0.1:${port}`;
-  return `${origin.replace(/\/+$/, '')}/api/auth/${provider}/callback`;
+  return origin.replace(/\/+$/, '');
 }
 
 /** The URL to send the browser to in order to begin. */

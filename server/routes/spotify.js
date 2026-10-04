@@ -2,6 +2,7 @@ import { asyncRouter } from '../http.js';
 import { db } from '../db.js';
 import { requireAuth, newState, verifyState } from '../auth.js';
 import { consumeLinkState } from '../store.js';
+import { publicOrigin } from '../oauth.js';
 
 const router = asyncRouter();
 
@@ -14,8 +15,10 @@ const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || '';
  * only tolerated on loopback, which is where this server runs by default.
  */
 export const PORT = Number(process.env.PORT) || 5173;
+// From PUBLIC_ORIGIN when deployed. Falling back to loopback here made every
+// deployed connect fail with redirect_uri_mismatch while working locally.
 export const REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI
-  || `http://127.0.0.1:${PORT}/api/spotify/callback`;
+  || `${publicOrigin()}/api/spotify/callback`;
 
 const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize';
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
