@@ -118,8 +118,28 @@ and functions before applying rewrites, so the SPA fallback
 
 ## 3. Environment variables
 
-Only needed if you want the Spotify player. Add them under
-**Project → Settings → Environment Variables**:
+### Required: `JWT_SECRET`
+
+**The app will not start without this.** Set it before your first deploy:
+
+```bash
+openssl rand -base64 48
+```
+
+In production the server refuses to boot if it is missing, rather than falling
+back to a hardcoded secret that anyone reading the repository could use to
+forge a session as any account. This fails loudly and early on purpose — see
+[Troubleshooting](#troubleshooting) for what it looks like when it is unset.
+
+Two consequences worth knowing:
+
+- Setting it for the first time **invalidates every existing session**, so
+  anyone signed in has to sign in again.
+- Rotate it the same way if it is ever exposed.
+
+### Everything else
+
+Optional. Add them under **Project → Settings → Environment Variables**:
 
 | Variable | Purpose |
 |---|---|
@@ -130,6 +150,7 @@ Only needed if you want the Spotify player. Add them under
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional Google sign-in |
 | `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` | optional Microsoft sign-in |
 | `PUBLIC_ORIGIN` | the deployed origin, used to build the OAuth redirect URIs |
+| `GOOGLE_CALENDAR_REDIRECT_URI` | optional; overrides the Calendar callback URL if Google Cloud needs a different one |
 
 ## Signing in with Google or Microsoft
 
@@ -208,4 +229,5 @@ curl https://your-app.vercel.app/api/health
 | Blank page, console 404 on a JS file | `outputDirectory` is not `public`. Check `vercel.json`. |
 | `No such endpoint` on every API call | The function is not matching. Confirm `api/index.js` exists and the repo root is the project root. |
 | `node:sqlite` not found | Runtime is below Node 24. Check the Node version Vercel reports. |
+| Page loads, every API call returns 500 `FUNCTION_INVOCATION_FAILED` | `JWT_SECRET` is not set. The server refuses to boot without it — see section 3. This is the expected failure, not a bug: set the variable and redeploy. |
 | Login works, then everything 500s | The instance recycled and lost the in-memory database. Expected without a hosted DB. |
