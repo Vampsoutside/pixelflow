@@ -45,14 +45,20 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const API_BASE = 'https://www.googleapis.com/calendar/v3/calendars';
 
 /**
- * Full read/write on the primary calendar.
+ * Event-level read/write, nothing else.
  *
- * calendar.events is what makes an edit in the app reach Google. Google also
- * offers a narrower calendar.events.readonly, which would silently turn every
- * push into a no-op — so this asks for the scope the feature actually needs
- * rather than the one that looks more privacy-conscious.
+ * This was https://www.googleapis.com/auth/calendar — "see, edit, share, and
+ * permanently delete ALL the calendars you can access". The code only ever
+ * calls the events collection on the primary calendar, so the broader grant
+ * bought nothing and was a question waiting to be asked in Google's
+ * verification review, which asks specifically whether each scope is minimal.
+ *
+ * calendar.events gives view and edit of events. It deliberately does NOT give
+ * calendar.acls (sharing), calendar.calendarlist (the list of calendars) or
+ * calendar.calendars (calendar properties), none of which the app reads or
+ * needs. Widening this later should be a deliberate change, not an accident.
  */
-const SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/calendar'].join(' ');
+const SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/calendar.events'].join(' ');
 
 export const calendarConfigured = () => Boolean(CLIENT_ID && CLIENT_SECRET);
 

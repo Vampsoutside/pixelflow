@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — PixelFlow</title>
+<meta name="description" content="What PixelFlow stores, why, who it is shared with, and how to get it deleted.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="/privacy">
+<style>
+  :root { --fg:#e8e8ef; --muted:#9a9aae; --bg:#0f0f16; --card:#171722; --line:#2a2a3a;
+          --accent:#7c6fff; --link:#8f85ff; }
+  @media (prefers-color-scheme: light) {
+    :root { --fg:#1a1a22; --muted:#5a5a6a; --bg:#fbfbfd; --card:#fff; --line:#e3e3ec; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  .wrap { max-width:720px; margin:0 auto; padding:48px 24px 96px; }
+  h1 { font-size:1.9rem; line-height:1.25; margin:0 0 6px; letter-spacing:-.02em; }
+  h2 { font-size:1.15rem; margin:38px 0 10px; letter-spacing:-.01em; }
+  h3 { font-size:1rem; margin:24px 0 6px; color:var(--fg); }
+  p, li { color:var(--muted); }
+  strong { color:var(--fg); font-weight:600; }
+  a { color:var(--link); }
+  .lede { color:var(--fg); opacity:.75; margin:0 0 4px; }
+  .meta { font-size:.85rem; color:var(--muted); opacity:.7; margin:0 0 34px; }
+  ul { padding-left:20px; }
+  li { margin:5px 0; }
+  table { width:100%; border-collapse:collapse; margin:16px 0; font-size:.93rem; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--fg); font-weight:600; }
+  td { color:var(--muted); }
+  code { background:var(--card); border:1px solid var(--line); border-radius:5px;
+         padding:1px 5px; font-size:.88em; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:10px;
+         padding:16px 18px; margin:20px 0; }
+  .box p { margin:6px 0; }
+  hr { border:0; border-top:1px solid var(--line); margin:34px 0; }
+  footer { margin-top:44px; font-size:.88rem; color:var(--muted); opacity:.75; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Privacy Policy</h1>
+  <p class="lede">What PixelFlow stores, why, who else sees it, and how to make it go away.</p>
+  <p class="meta">Last updated: 4 October 2026 &middot; Applies to stitch-flax.vercel.app</p>
+
+  <div class="box">
+    <p><strong>The short version.</strong> PixelFlow is a personal study tracker. Your study
+    data belongs to you, we do not sell it, we do not show anyone ads, and we do not use
+    analytics or third-party tracking. Connecting Google or Spotify is optional and you can
+    disconnect at any time. Deleting your account deletes your data.</p>
+  </div>
+
+  <h2>1. What this covers</h2>
+  <p>This policy describes the PixelFlow web app. It does not cover Google or Spotify's own
+  services — once you grant access, <strong>their</strong> privacy policies govern the data on
+  their side.</p>
+
+  <h2>2. What we collect</h2>
+  <p>Everything below is stored on our server so the app can work. Nothing is collected in
+  the background, and there is no third-party analytics script.</p>
+
+  <h3>Account</h3>
+  <table>
+    <tr><th>Data</th><th>Why</th></tr>
+    <tr><td>Username</td><td>Identifies you in the app, and is what friends see.</td></tr>
+    <tr><td>Email address</td><td>Sign-in, account recovery, and provider linking.</td></tr>
+    <tr><td>Password hash</td><td>Sign-in. We store only a salted scrypt hash — never your password itself.</td></tr>
+    <tr><td>Pixel avatar</td><td>Display. Purely cosmetic.</td></tr>
+  </table>
+  <p>You can sign up as a guest instead, which gives you an account with a random password
+  you do not know and no email address until you claim it.</p>
+
+  <h3>Study activity</h3>
+  <table>
+    <tr><th>Data</th><th>Why</th></tr>
+    <tr><td>Study minutes per day</td><td>Totals, streaks and the charts.</td></tr>
+    <tr><td>Planned minutes per weekday</td><td>Your weekly plan, and whether you hit it.</td></tr>
+    <tr><td>Pomodoro sessions</td><td>Start and end time, focus minutes, the topic you typed.</td></tr>
+    <tr><td>Tasks and tags</td><td>Your to-do list.</td></tr>
+    <tr><td>Calendar events and deadlines</td><td>The items you put on your calendar.</td></tr>
+  </table>
+  <p>The topic you type into the timer is stored verbatim and shown back to you. Treat it as
+  private: do not type anything into it that you would not want stored on a server.</p>
+
+  <h3>Social</h3>
+  <p>If you connect with other users, we store that you are connected and, while the app is
+  open, whether you are online, away or offline and what you are studying. <strong>Connected
+  users can see</strong> your username, avatar, experience level, and your study minutes for
+  today and this week — including your planned minutes. We do not show anyone your task
+  lists, your calendar, your tags or your email address.</p>
+
+  <h2>3. Optional connections</h2>
+  <p>Both are optional. Nothing in PixelFlow requires them, and the app is fully usable
+  without either.</p>
+
+  <h3>Google (sign-in)</h3>
+  <p>If you sign in with Google we store Google's immutable user id and the email address
+  on your Google account, so we can recognise you next time. We do not read your Gmail,
+  Drive or contacts.</p>
+
+  <h3>Google Calendar (sync)</h3>
+  <p>If you connect your calendar, we store an access token and a refresh token, plus the
+  title, date and time of the events we sync. We request access to events only. We cannot
+  see your calendar list, its sharing settings, or any calendar other than the one you
+  connect. You can disconnect at any time, which deletes the stored tokens immediately.</p>
+
+  <h3>Spotify (playback)</h3>
+  <p>If you connect Spotify we store an access token and a refresh token. Playback happens
+  inside Spotify's own player, which is subject to Spotify's privacy policy.</p>
+
+  <h2>4. Who else can see your data</h2>
+  <p>Only the infrastructure providers needed to run the app, all of whom process data
+  solely on our instructions:</p>
+  <ul>
+    <li><strong>Vercel</strong> — hosts the app and serves its files.</li>
+    <li><strong>Turso</strong> — hosts the database where your records are stored.</li>
+    <li><strong>Google</strong> — sign-in, and calendar sync if you connect it.</li>
+    <li><strong>Spotify</strong> — playback, if you connect it.</li>
+  </ul>
+  <p>We do not sell your data, rent it, or share it for anyone else's advertising. We do not
+  use advertising or analytics networks.</p>
+
+  <h2>5. Cookies</h2>
+  <p>PixelFlow sets three cookies, all strictly necessary and none of which track you across
+  sites:</p>
+  <table>
+    <tr><th>Cookie</th><th>Purpose</th></tr>
+    <tr><td><code>pf_session</code></td><td>Keeps you signed in. HttpOnly, so scripts cannot read it.</td></tr>
+    <tr><td><code>pf_session_csrf</code></td><td>Protects against cross-site request forgery.</td></tr>
+    <tr><td><code>pf_consent</code></td><td>Records that you answered the cookie banner, so we do not ask again.</td></tr>
+  </table>
+  <p>On your first visit we ask whether you accept these. Declining does not stop the app
+  working — the session cookies are set by the server and are required to sign you in at all.
+  You can clear them at any time in your browser settings, which signs you out.</p>
+
+  <h2>6. How long we keep it</h2>
+  <p>Your data is kept for as long as your account exists. When you delete your account, it
+  is removed immediately — see below.</p>
+
+  <h2>7. Deleting your data</h2>
+  <p>You can delete your account and everything in it from <strong>Settings &rarr; Delete
+  account</strong>. This permanently removes:</p>
+  <ul>
+    <li>your account, username, email and avatar;</li>
+    <li>all study logs, plans, pomodoro sessions, tasks, tags and calendar items;</li>
+    <li>your friendships and presence;</li>
+    <li>your stored Google and Spotify tokens and any linked provider identity.</li>
+  </ul>
+  <p>Deletion is immediate and your access ends at the same time — a stale session cannot
+  keep working afterwards. This is not a request queue; there is nothing to wait for.</p>
+  <p>To disconnect only a provider, without deleting your account, use the disconnect button
+  beside it in Settings.</p>
+  <h3>What we cannot delete for you</h3>
+  <p>Events already synced into Google Calendar from PixelFlow, and your Spotify account,
+  live in those services. Disconnecting stops all further access; to remove an event
+  entirely, revoke PixelFlow's access from your
+  <a href="https://myaccount.google.com/permissions" rel="noopener">Google account
+  permissions</a> page or from your Spotify account settings.</p>
+
+  <h2>8. Security</h2>
+  <ul>
+    <li>Passwords are stored as salted scrypt hashes, never in plain text.</li>
+    <li>Sessions are signed cookies that are HttpOnly and SameSite-restricted.</li>
+    <li>Provider tokens are stored server-side and never sent to the browser.</li>
+    <li>State-changing requests require a CSRF token, so another site cannot act as you.</li>
+    <li>The production server refuses to start without a signing secret configured.</li>
+  </ul>
+  <p>No system is perfect. If you believe your account has been compromised, delete the
+  account and create a new one.</p>
+
+  <h2>9. Children</h2>
+  <p>PixelFlow is not directed at children under 13 and we do not knowingly collect their
+  data. If you believe a child has given us personal information, contact us and we will
+  delete it.</p>
+
+  <h2>10. Changes to this policy</h2>
+  <p>If we change what we collect or why, we will update the date at the top of this page.
+  Material changes will be announced in the app before they take effect.</p>
+
+  <h2>11. Contact</h2>
+  <div class="box">
+    <p><strong>Questions, or a deletion request?</strong></p>
+    <p>Use the contact address in the app's Settings page. Because deletion is self-service,
+    that same place is the fastest way to have anything removed.</p>
+  </div>
+
+  <hr>
+  <footer>
+    <p>PixelFlow is an independent study-tracking app and is not affiliated with, endorsed by,
+    or sponsored by Google, Spotify, Vercel or Turso. Google Calendar and Spotify are
+    trademarks of their respective owners.</p>
+    <p><a href="/">Back to PixelFlow</a> &middot; <a href="/terms">Terms of Use</a></p>
+  </footer>
+</main>
+</body>
+</html>

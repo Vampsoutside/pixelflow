@@ -500,7 +500,24 @@ describe('google calendar: the oauth handshake', () => {
     assert.equal(res.status, 302);
     const url = new URL(res.headers.get('location'));
     assert.ok(url.origin.includes('google.com'), 'redirects to google');
-    assert.ok(url.searchParams.get('scope').includes('calendar'), 'asks for calendar access');
+    const scopes = url.searchParams.get('scope').split(' ');
+    // Least privilege, and this is checked in Google's verification review.
+    // https://www.googleapis.com/auth/calendar is "see, edit, share, and
+    // permanently delete ALL the calendars you can access" — the app only ever
+    // touches events on the primary calendar, so the broader scope is an
+    // unneeded grant and a review question at best.
+    assert.ok(
+      scopes.includes('https://www.googleapis.com/auth/calendar.events'),
+      'asks for event-level calendar access'
+    );
+    assert.ok(
+      !scopes.includes('https://www.googleapis.com/auth/calendar'),
+      'must NOT request blanket calendar access'
+    );
+    assert.ok(
+      !scopes.some((s) => s.includes('calendar.acls') || s.includes('calendar.calendarlist')),
+      'must not request sharing or calendar-list access'
+    );
     assert.equal(url.searchParams.get('access_type'), 'offline', 'needed for a refresh token');
     assert.ok(url.searchParams.get('state'), 'carries state');
   });

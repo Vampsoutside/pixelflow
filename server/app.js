@@ -105,6 +105,35 @@ app.put('/api/me', requireAuth, async (req, res) => {
   return res.json({ user: await getUser(user.id) });
 });
 
+/**
+ * Delete the signed-in account and everything belonging to it.
+ *
+ * Not a nicety: Google's API Services User Data Policy requires an app holding
+ * Google user data to give users a way to delete it, and verification is
+ * refused without one.
+ *
+ * Three deliberate choices:
+ *
+ *  - No password. Someone who has forgotten theirs still has a right to
+ *    erasure, and demanding it here would mean the data outlives the account
+ *    for anyone who lost their credentials. The session cookie and the CSRF
+ *    check are what actually protect this route.
+ *  - No id in the body. There is no way to name a target, so there is no way
+ *    to delete anyone else — a caller can only ever delete themselves.
+ *  - Relies on the ON DELETE CASCADE every owned table declares. Spelling out
+ *    twenty DELETEs here would be twenty chances to miss one, and a study log
+ *    outliving the account is precisely what the policy is about.
+ */
+app.delete('/api/me', requireAuth, async (req, res) => {
+  await db.prepare('DELETE FROM users WHERE id = ?').run(req.user.id);
+  // The session row goes with the account, but the cookie is already in the
+  // browser — clear it, or a deleted account keeps presenting a valid-looking
+  // cookie to the client.
+  res.clearCookie('pf_session');
+  res.clearCookie('pf_session_csrf');
+  return res.json({ ok: true, deleted: true });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/study', studyRoutes);
 app.use('/api/friends', friendsRoutes);

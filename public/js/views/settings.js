@@ -326,8 +326,73 @@ export function settingsSidePanel(body) {
     onclick: () => skipToBreak(),
   }));
 
-  body.append(el('div', { class: 'sect-hd', text: 'DATA' }));
-  body.append(el('div', { class: 'pane-sub', style: { lineHeight: '1.7' }, text: 'Everything you log — study entries, tasks, tags, friends, sessions and settings — is stored in a local SQLite database on this machine and synced to your account. Nothing is sent anywhere except Spotify, if you connect it.' }));
+  body.append(el('div', { class: 'sect-hd', text: 'DATA AND PRIVACY' }));
+  // Kept in step with what the app actually does. This text used to claim the
+  // data never left the machine, which stopped being true the moment a hosted
+  // database and Google Calendar sync existed — and a privacy notice that
+  // understates where data goes is the kind of thing a reviewer checks.
+  body.append(el('div', { class: 'pane-sub', style: { lineHeight: '1.7' }, text: 'Everything you log — study entries, tasks, tags, friends, sessions and settings — is stored in our database so it can follow you across devices. Google Calendar and Spotify are contacted only if you connect them. We do not sell your data and we do not use advertising or analytics trackers.' }));
+  body.append(el('div', { style: { marginTop: '10px' } }, [
+    el('a', { class: 'btn', href: '/privacy', target: '_blank', rel: 'noopener', text: 'Read the privacy policy', style: { display: 'inline-block', textDecoration: 'none', marginRight: '8px' } }),
+    el('a', { class: 'btn', href: '/terms', target: '_blank', rel: 'noopener', text: 'Terms of use', style: { display: 'inline-block', textDecoration: 'none' } }),
+  ]));
+
+  body.append(el('div', { class: 'sect-hd', text: 'DELETE ACCOUNT' }));
+  body.append(deleteAccountSection());
+}
+
+/**
+ * Permanent account deletion.
+ *
+ * Google's API Services User Data Policy requires a way to delete the data an
+ * app holds, so this is not optional polish. Two deliberate choices: the
+ * account is never deleted from the first click, and the confirmation names
+ * exactly what goes rather than saying "are you sure?".
+ */
+function deleteAccountSection() {
+  const wrap = el('div');
+  const note = el('div', {
+    class: 'pane-sub',
+    style: { lineHeight: '1.7', marginBottom: '10px' },
+    text: 'Deleting your account permanently removes your profile, every study log, plan, pomodoro session, task, tag and calendar item, your friendships, and any connected Google or Spotify account. It happens immediately and cannot be undone.',
+  });
+
+  const start = el('button', { class: 'btn block', text: 'Delete my account' });
+  const confirm = el('button', { class: 'btn block', text: 'Yes, permanently delete everything', style: { display: 'none' } });
+  const cancel = el('button', { class: 'btn block', text: 'Cancel', style: { display: 'none' } });
+
+  start.addEventListener('click', () => {
+    note.textContent = 'This cannot be undone. Your Google and Spotify connections will be released too.';
+    start.style.display = 'none';
+    confirm.style.display = '';
+    cancel.style.display = '';
+    confirm.focus();
+  });
+
+  cancel.addEventListener('click', () => {
+    note.textContent = 'Deleting your account permanently removes your profile, every study log, plan, pomodoro session, task, tag and calendar item, your friendships, and any connected Google or Spotify account. It happens immediately and cannot be undone.';
+    start.style.display = '';
+    confirm.style.display = 'none';
+    cancel.style.display = 'none';
+  });
+
+  confirm.addEventListener('click', async () => {
+    confirm.textContent = 'Deleting…';
+    confirm.disabled = true;
+    try {
+      await api.del('/api/me');
+      // The session is gone, so a reload lands on a signed-out app rather than
+      // a half-broken one still pretending to be signed in.
+      window.location.href = '/';
+    } catch (err) {
+      toast(err.message || 'Could not delete the account', 3600);
+      confirm.textContent = 'Yes, permanently delete everything';
+      confirm.disabled = false;
+    }
+  });
+
+  wrap.append(note, start, confirm, cancel);
+  return wrap;
 }
 
 function row(label, value) {

@@ -1,6 +1,7 @@
 import {
   randomBytes, scryptSync, timingSafeEqual, createHmac, createHash,
 } from 'node:crypto';
+import { db } from './db.js';
 
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
 export const SESSION_COOKIE = 'pf_session';
@@ -215,12 +216,37 @@ export function ensureCsrfCookie(req, res, next) {
 // ── Express middleware ───────────────────────────────────────────────────
 
 /** Attaches `req.user` (or null). Never rejects. */
-export function attachUser(req, _res, next) {
+/**
+ * Resolve the session cookie to a user.
+ *
+ * The database check is not redundant with the signature. A JWT stays
+ * cryptographically valid until it expires, so without it a deleted account —
+ * or a session revoked in any other way — keeps full access for the rest of
+ * the token's life, which would make account deletion meaningless. One indexed
+ * primary-key lookup is a fair price for deletion actually deleting.
+ *
+ * Failures resolve to signed out rather than throwing: a database blip should
+ * not read to the user as an error on their own account.
+ */
+export async function attachUser(req, _res, next) {
   req.user = null;
   const token = req.cookies?.[SESSION_COOKIE];
   if (token) {
     const payload = readToken(token);
-    if (payload?.uid) req.user = { id: Number(payload.uid) };
+    const id = Number(payload?.uid);
+    if (Number.isInteger(id) && id > 0) {
+      let row;
+      try {
+        row = await db.prepare('SELECT id FROM users WHERE id = ?').get(id);
+      } catch (err) {
+        // Only a database failure should degrade to "signed out". Swallowing
+        // everything here once hid a ReferenceError and made every request
+        // look anonymous, so the failure is logged rather than absorbed.
+        console.error('[auth] session lookup failed:', err.message);
+        req.user = null;
+      }
+      if (row) req.user = { id: Number(row.id) };
+    }
   }
   next();
 }
