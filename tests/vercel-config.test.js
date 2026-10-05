@@ -35,9 +35,25 @@ const sourceOf = (destination) => rewrites.find((r) => r.destination === destina
 const MATCHERS = {
   '/api/(.*)': (path) => path === '/api' || path.startsWith('/api/'),
   '/((?!api/).*)': (path) => !path.startsWith('/api/'),
-  // The single explicit rewrite, for the one path that is served by Express
-  // rather than as a static file.
+  // The single explicit rewrite, for the one path served by Express rather
+  // than as a static file.
   '/app': (path) => path === '/app',
+
+  // The fallback for client-side routes. The negative lookahead is what stops
+  // it shadowing the real pages: without every excluded path listed here,
+  // /about returns the landing page with a 200, which is exactly the bug that
+  // kept Google's reviewer looking at a login-like home page.
+  '/((?!api/|app$|app/|about$|privacy$|terms$|support$|products$|logo\\.svg$|css/|js/).*)':
+    (path) => {
+      const bare = path.replace(/\/$/, '');
+      if (path.startsWith('/api/')) return false;
+      if (bare === '/app') return false;
+      if (path.startsWith('/app/')) return false;
+      if (['/about', '/privacy', '/terms', '/support', '/products'].includes(bare)) return false;
+      if (bare === '/logo.svg') return false;
+      if (path.startsWith('/css/') || path.startsWith('/js/')) return false;
+      return true;
+    },
 };
 
 function matches(source, path) {
@@ -89,34 +105,33 @@ describe('vercel.json', () => {
     }
   });
 
-  test('there is no catch-all that could shadow a page', () => {
+  test('the fallback rewrite spares every real page', () => {
     // The bug this guards: Vercel evaluates rewrites BEFORE the filesystem, so
-    // "/((?!api/).*)" -> /index.html made /about return the landing page with a
-    // 200. Status checks pass, tests that only look for words pass, and the
-    // page is simply the wrong document. With no catch-all, the real files win.
-    const shell = rewrites.find((r) => r.destination === '/index.html');
-    assert.ok(
-      !shell,
-      'no catch-all rewrite: every public page is a real file and the app is at /app'
-    );
-  });
+    // an unfiltered catch-all makes /about return the landing page with a 200.
+    // Status checks pass and any test that greps for a word passes too, because
+    // the landing page mentions study, calendar and privacy itself.
+    const shell = sourceOf('/index.html');
+    assert.ok(shell, 'a fallback for client-side routes is expected');
 
-  test('the api rewrite is the only rule besides /app', () => {
-    assert.deepEqual(
-      rewrites.map((r) => r.source).sort(),
-      ['/api/(.*)', '/app'],
-      'keep rewrites minimal — anything else shadows a static page'
-    );
+    for (const path of [
+      '/about', '/privacy', '/terms', '/support', '/products',
+      '/logo.svg', '/css/site.css', '/js/app.js',
+      '/app', '/app/timer', '/api/health',
+    ]) {
+      assert.ok(!matches(shell, path), `the fallback must not match ${path}`);
+    }
+
+    // And it must still catch a genuine client-side route.
+    assert.ok(matches(shell, '/tracker'), 'unknown paths fall back to the landing page');
   });
 
 
   test('the static catch-all still spares api paths', () => {
-    // Client-side routes are hash-based (#timer), so there is no server-side
-    // route for them to serve. /tracker and /js/app.js resolve as files.
-    assert.ok(!sourceOf('/index.html'), 'no catch-all; sections use hash routes');
-    for (const asset of ['/js/app.js', '/css/site.css', '/logo.svg']) {
-      assert.ok(existsSync(join(root, 'public', asset)), `public${asset} must exist`);
-    }
+    const source = sourceOf('/index.html');
+    assert.ok(source, 'a fallback serving the landing page is expected');
+    assert.ok(!matches(source, '/api/auth/signup'), 'api paths are never the fallback');
+    assert.ok(!matches(source, '/js/app.js'), 'static assets are served from the CDN');
+    assert.ok(matches(source, '/tracker'), 'client-side routes fall back');
   });
 
   test('static assets are served from public', () => {

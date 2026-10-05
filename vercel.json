@@ -10,6 +10,7 @@
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
-    { "source": "/app", "destination": "/api/index" }
+    { "source": "/app", "destination": "/api/index" },
+    { "source": "/((?!api/|app$|app/|about$|privacy$|terms$|support$|products$|logo\\.svg$|css/|js/).*)", "destination": "/index.html" }
   ]
 }
