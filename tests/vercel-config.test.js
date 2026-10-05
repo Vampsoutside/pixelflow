@@ -37,6 +37,7 @@ const MATCHERS = {
   '/((?!api/).*)': (path) => !path.startsWith('/api/'),
   // Explicit single-path rewrites to the function, for the pages that must not
   // be swallowed by the SPA catch-all.
+  '/about': (path) => path === '/about',
   '/privacy': (path) => path === '/privacy',
   '/terms': (path) => path === '/terms',
 };
@@ -105,7 +106,7 @@ describe('vercel.json', () => {
     const shell = sourceOf('/index.html');
     assert.ok(shell, 'expected the SPA catch-all');
 
-    const legal = ['/privacy', '/terms'];
+    const legal = ['/about', '/privacy', '/terms'];
     for (const path of legal) {
       const explicit = rewrites.find((r) => r.source === path);
       assert.ok(explicit, `${path} needs its own rewrite to the function`);
@@ -123,7 +124,7 @@ describe('vercel.json', () => {
   test('the legal pages exist in the output directory', () => {
     // A rewrite pointing at a file that is not deployed serves nothing useful,
     // and the config test alone would still pass.
-    for (const file of ['privacy.html', 'terms.html']) {
+    for (const file of ['about.html', 'privacy.html', 'terms.html']) {
       const p = join(root, 'public', file);
       assert.ok(existsSync(p), `public/${file} must exist to be served`);
     }

@@ -283,6 +283,20 @@ input:focus-visible, textarea:focus-visible,
 .auth-tab.active { background: var(--accent); color: #fff; }
 
 .auth-switch { font-size: 12px; color: var(--muted); margin-top: 16px; }
+
+/* About / privacy / terms links on the signed-out screen. Present so someone
+   who lands without an account — including Google's reviewer — has somewhere
+   to read what the app is before deciding to sign in. */
+.auth-legal {
+  font-size: 11.5px;
+  color: var(--muted);
+  opacity: .85;
+  margin: 18px 0 0;
+  text-align: center;
+  line-height: 1.8;
+}
+.auth-legal a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+.auth-legal a:hover { color: var(--accent); }
 .auth-switch a { color: var(--accent); cursor: pointer; font-weight: 600; }
 
 /* Guest entry — secondary, so it never competes with the real buttons. */

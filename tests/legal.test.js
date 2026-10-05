@@ -296,6 +296,45 @@ describe('the legal pages google asks for', () => {
     }
   });
 
+  test('/about explains the app to a crawler with no JavaScript', async () => {
+    // Google's brand verification rejected the submission because the home
+    // page looked like a login screen. index.html is a single-page app whose
+    // body is two hidden divs, so a crawler that does not run JS — which is
+    // exactly how the reviewer fetches it — sees a blank page and concludes
+    // there is nothing to review.
+    const res = await fetch(`${base}/about`);
+    assert.equal(res.status, 200);
+    const body = await res.text();
+
+    assert.ok(body.includes('PixelFlow'), 'names the app');
+    assert.ok(!body.includes('<div id="auth-overlay"'), 'not the app shell');
+
+    // The two things the reviewer checks by name: what the app does, and who it
+    // is for.
+    const lower = body.toLowerCase();
+    for (const term of ['pomodoro', 'study', 'calendar', 'timer', 'focus']) {
+      assert.ok(lower.includes(term), `the about page should mention ${term}`);
+    }
+  });
+
+  test('/about is reachable without signing in', async () => {
+    const res = await fetch(`${base}/about`);
+    assert.equal(res.status, 200);
+    assert.ok(!res.headers.get('location'), 'must not redirect to a login');
+  });
+
+  test('the app homepage carries a description and canonical URL', async () => {
+    // The consent screen links to the home page, and a bare <title> with no
+    // description gives a reviewer nothing to judge the app by.
+    const res = await fetch(`${base}/`);
+    const html = await res.text();
+    assert.ok(
+      /<meta\s+name=["']description["']\s+content=["'][^"]{40,}["']/i.test(html),
+      'needs a real meta description'
+    );
+    assert.ok(/PixelFlow/.test(html), 'the title should name the app');
+  });
+
   test('the consent screen offers them as links', async () => {
     const res = await fetch(`${base}/api/auth/providers`);
     const body = await res.json();

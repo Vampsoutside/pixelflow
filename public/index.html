@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PixelFlow — Study & Focus</title>
+<title>PixelFlow — pixel-art pomodoro timer and study tracker</title>
+<meta name="description" content="PixelFlow is a pixel-art pomodoro timer and study tracker. Plan weekly study hours, time what you actually study, keep tasks and deadlines on a calendar, and sync Google Calendar to follow your schedule across devices.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stitch-flax.vercel.app/">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -46,7 +49,13 @@
       <div class="auth-provider-list" id="auth-provider-list"></div>
     </div>
 
-    <button class="auth-btn auth-guest" type="button" id="auth-guest">Continue as guest</button>
+    <p class="auth-legal">
+    <a href="/about">About this app</a> &middot;
+    <a href="/privacy">Privacy Policy</a> &middot;
+    <a href="/terms">Terms of Use</a>
+  </p>
+
+  <button class="auth-btn auth-guest" type="button" id="auth-guest">Continue as guest</button>
     <p class="auth-guest-note" id="auth-guest-note">
       Try everything out. Your progress saves automatically — add a password
       later to keep it.
