@@ -11,6 +11,13 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/app", "destination": "/api/index" },
-    { "source": "/((?!api/|app$|app/|about$|privacy$|terms$|support$|products$|logo\\.svg$|css/|js/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|app$|app/|about|privacy|terms|support|products|logo\\.svg|css|js/).*)", "destination": "/index.html" }
+  ],
+  "redirects": [
+    { "source": "/about", "destination": "/about.html", "permanent": false },
+    { "source": "/privacy", "destination": "/privacy.html", "permanent": false },
+    { "source": "/terms", "destination": "/terms.html", "permanent": false },
+    { "source": "/support", "destination": "/support.html", "permanent": false },
+    { "source": "/products", "destination": "/products.html", "permanent": false }
   ]
 }

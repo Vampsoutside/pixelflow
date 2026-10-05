@@ -43,14 +43,14 @@ const MATCHERS = {
   // it shadowing the real pages: without every excluded path listed here,
   // /about returns the landing page with a 200, which is exactly the bug that
   // kept Google's reviewer looking at a login-like home page.
-  '/((?!api/|app$|app/|about$|privacy$|terms$|support$|products$|logo\\.svg$|css/|js/).*)':
+  '/((?!api/|app$|app/|about|privacy|terms|support|products|logo\\.svg|css|js/).*)':
     (path) => {
-      const bare = path.replace(/\/$/, '');
       if (path.startsWith('/api/')) return false;
-      if (bare === '/app') return false;
-      if (path.startsWith('/app/')) return false;
-      if (['/about', '/privacy', '/terms', '/support', '/products'].includes(bare)) return false;
-      if (bare === '/logo.svg') return false;
+      if (path === '/app' || path.startsWith('/app/')) return false;
+      if (path.startsWith('/about') || path.startsWith('/privacy')) return false;
+      if (path.startsWith('/terms') || path.startsWith('/support')) return false;
+      if (path.startsWith('/products')) return false;
+      if (path.startsWith('/logo.svg')) return false;
       if (path.startsWith('/css/') || path.startsWith('/js/')) return false;
       return true;
     },
@@ -105,6 +105,22 @@ describe('vercel.json', () => {
     }
   });
 
+  test('the public pages are reachable without the .html suffix', () => {
+    // Vercel's static layer serves /about.html but 404s /about, and a rewrite
+    // is evaluated before the filesystem — so a rewrite pointing at /about.html
+    // would work while a rewrite pointing at the function does not. A redirect
+    // is the rule type that is resolved from disk, which is why these are
+    // redirects and not rewrites. Getting this backwards is what made /about
+    // 404 while /about.html returned 200.
+    const redirects = config.redirects || [];
+    for (const page of ['about', 'privacy', 'terms', 'support', 'products']) {
+      const rule = redirects.find((r) => r.source === `/${page}`);
+      assert.ok(rule, `/${page} needs a redirect to be reachable without .html`);
+      assert.equal(rule.destination, `/${page}.html`);
+      assert.ok(existsSync(join(root, 'public', `${page}.html`)), 'and the file must exist');
+    }
+  });
+
   test('the fallback rewrite spares every real page', () => {
     // The bug this guards: Vercel evaluates rewrites BEFORE the filesystem, so
     // an unfiltered catch-all makes /about return the landing page with a 200.
@@ -155,10 +171,12 @@ describe('vercel.json', () => {
       'support.html', 'products.html', 'logo.svg']) {
       assert.ok(existsSync(join(root, 'public', file)), `public/${file} must exist`);
     }
+    // They are reached by redirect, never by rewrite: a rewrite is applied
+    // before the filesystem and cannot serve a static file by its clean path.
     for (const path of ['/about', '/privacy', '/terms']) {
       assert.ok(
         !rewrites.some((r) => r.source === path),
-        `${path} is a static file and should not have a rewrite`
+        `${path} is served by redirect, not rewrite`
       );
     }
   });
