@@ -1,62 +1,87 @@
 # Google OAuth verification — status and remaining steps
 
-Verified against Google's own documentation:
-[Comply with OAuth 2.0 policies](https://developers.google.com/identity/protocols/oauth2/production-readiness/policy-compliance)
-and [Submit for brand verification](https://developers.google.com/identity/protocols/oauth2/production-readiness/brand-verification).
+## Why the first two submissions were rejected
 
-## Why the first submission was rejected
+Google's reviewer fetches the **Home page URL from the consent screen** without
+running JavaScript. Twice, that URL resolved to the login-walled app shell, so
+the reviewer saw a sign-in form and nothing else:
 
-Google's reviewer fetches the home page the way a browser without JavaScript
-does. `index.html` is a single-page app whose entire body is two divs — an auth
-overlay and the app shell — and **both ship with the `hidden` attribute**. So
-the reviewer saw a blank page and reported four symptoms, all from that one
-cause:
+> Your home page is behind a login page. / Your home page does not explain the
+> purpose of your app. / The app name "stitch" configured for your OAuth consent
+> screen does not match the app name on your home page.
 
-| Reviewer said | Actual cause |
+The app name mismatch was a separate thing: the Vercel project was called
+`stitch` while the product is called PixelFlow.
+
+## What changed
+
+**The app moved from `/` to `/app`.** This is the structural fix. `/` is now a
+public marketing page — hero, feature grid, data-handling summary, working links
+— that explains the app to anyone who has not signed in. `/app` serves the
+login-walled shell exactly as before. Every provider return (sign-in, Calendar
+sync, Spotify) now redirects to `/app?...` so an OAuth callback still lands in
+the app rather than on the landing page.
+
+**A logo.** `/logo.svg` — a pixel-art timer face with a flowing trail, drawn on
+an 8px grid so it stays legible as a favicon. Used in the header, hero, footer
+and favicon of every public page.
+
+**New pages**, all public, all sharing `/css/site.css`:
+- `/about` — what the app does, who it is for, how data is handled
+- `/products` — the full feature table, and what is deliberately absent
+- `/support` — common questions, self-service delete, contact and security routes
+- `/privacy`, `/terms` — rebuilt on the shared nav, header and footer
+
+## Two things only you can do
+
+### 1. Turn off Vercel Deployment Protection
+
+This is very likely the remaining blocker. The project currently reports:
+
+```
+ssoProtection:      enabled, all_except_custom_domains
+passwordProtection: disabled
+```
+
+So `https://pixelflow-vampsoutside.vercel.app` redirects to
+`https://vercel.com/sso-api?...` — **a login page**. If Google's reviewer follows
+the Home page URL to the project's own domain, they hit a Vercel sign-in wall and
+report exactly the error you received, no matter what the page contains.
+
+Dashboard → project **Settings → Deployment Protection** → turn off Vercel
+Authentication.
+
+`stitch-flax.vercel.app` is a custom domain on this project and is already
+public, which is why that one works. The protection applies to the project's own
+`*.vercel.app` domains.
+
+### 2. Fix the consent screen fields
+
+| Field | Value |
 |---|---|
-| Home page is behind a login page | The only thing present was a sign-in form |
-| Home page does not explain the app's purpose | No text existed outside JS |
-| App name "stitch" does not match the app | Page title read "PixelFlow" |
-| Home page URL not registered to you | `/#timer` — a hash fragment, not a page |
+| App name | `PixelFlow` |
+| Home page | your public URL — **no `#fragment`**, no trailing slash |
+| Privacy policy | `https://<your-domain>/privacy` |
+| Terms of service | `https://<your-domain>/terms` |
 
-The hash fragment is worth explaining: `https://stitch-flax.vercel.app/#timer` is
-the same page as `/`. Google read the fragment as a distinct path. Nothing was
-wrong with the domain — putting a clean URL in the field is the fix.
+The home page must be reachable with no sign-in and must describe the app. `/` now
+does that.
 
-## What changed in this repository
-
-- **`/about`** — a static page describing what the app does, who it is for, and
-  how data is handled. Crawler-visible, no JavaScript needed, no sign-in.
-- **Home page meta** — a real `<meta name="description">` and a canonical URL.
-- **Footer links on the signed-out screen** — About / Privacy / Terms, so a
-  human without an account has a way in.
-- **`/about`, `/privacy`, `/terms`** each have their own Vercel rewrite ahead of
-  the SPA catch-all, without which all three silently returned the app shell.
-
-## Do these before resubmitting
-
-1. **Rename the Vercel project from `stitch` to `PixelFlow`**
-   Dashboard → project **Settings → General → Project Name**.
-   This is the name the reviewer saw. Renaming changes your deployment URLs, so
-   add a custom domain if you want a stable one.
-2. **Set the Home page URL to `https://stitch-flax.vercel.app`**
-   No `#timer`, no trailing slash.
-3. **Set App name to `PixelFlow`** on the Branding page — it must match what
-   `/about` calls itself.
-4. **Privacy policy and Terms URLs**:
-   - `https://stitch-flax.vercel.app/privacy`
-   - `https://stitch-flax.vercel.app/terms`
+Then **wait 24 hours** before resubmitting, as Google's message asks — it is
+propagating the domain-ownership check.
 
 ## Already done
 
 - Privacy Policy and Terms of Use, public and crawler-visible.
-- Account deletion (`DELETE /api/me`, exposed in Settings), required by the
+- Account deletion (`DELETE /api/me`, in Settings), required by the
   API Services User Data Policy.
 - Least-privilege scope: `.../auth/calendar.events`, not `.../auth/calendar`.
   Does not request `calendar.acls`, `calendar.calendarlist` or
   `calendar.calendars`.
-- HTTPS-only redirect URIs built from `PUBLIC_ORIGIN`.
-- Both redirect URIs registered — sign-in and Calendar sync.
+- HTTPS-only redirect URIs built from `PUBLIC_ORIGIN`:
+  - `https://<your-domain>/api/auth/google/callback`
+  - `https://<your-domain>/api/googlecalendar/callback`
+- A meta description and canonical URL on every public page.
 
 ## Scope justification
 
@@ -76,21 +101,18 @@ wrong with the domain — putting a clean URL in the field is the fix.
 - **Google Calendar API** must be enabled (APIs & Services → Library). Sign-in
   works without it; sync 403s without it.
 - **Verify Branding** — automated where possible (minutes), otherwise 2–3
-  business days. Google's error text says to wait up to 24 hours after changing
-  ownership or branding before retrying; do that.
+  business days.
 - **Demo video.** Verification usually asks for a screen recording of the
-  feature using each scope. Record one continuous clip: sign in with Google →
-  connect Google Calendar → sync an event in → create an event in PixelFlow →
-  open Google Calendar and show it there. This is the most common reason a
-  submission bounces, and the only step not doable from the console.
-- **Production OAuth client hygiene.** Google's policy asks that production use a
-  client with no developer-only origins. If
-  `http://127.0.0.1:5173/api/auth/google/callback` is registered, remove it, or
-  move production to its own project.
+  feature using each scope. One continuous clip: sign in with Google → connect
+  Google Calendar → sync an event in → create an event in PixelFlow → open Google
+  Calendar and show it there. This is the most common reason a submission bounces
+  and the only step not doable from the console.
+- **Production OAuth client hygiene.** If
+  `http://127.0.0.1:5173/api/auth/google/callback` is registered, remove it.
 
 ## What this app does not do
 
 No advertising. No analytics or tracking SDKs. No third-party cookies. No sale
-or sharing of data. Friends see only username, avatar, level, and study totals.
-Stating this in the verification form is the strongest argument that the scopes
-are proportionate.
+or sharing of data. Friends see only username, avatar, level and study totals.
+State this in the verification form — it is the strongest argument that the
+scopes are proportionate.
