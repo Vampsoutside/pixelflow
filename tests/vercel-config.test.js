@@ -76,39 +76,60 @@ describe('vercel.json', () => {
     assert.deepEqual(declared, ['api/index.js']);
   });
 
-  test('the api rewrite comes before the static catch-all', () => {
-    // Order matters: the catch-all must not swallow API requests first.
-    const apiAt = rewrites.findIndex((r) => r.destination === '/api/index');
-    const htmlAt = rewrites.findIndex((r) => r.destination === '/index.html');
-    assert.ok(apiAt !== -1 && htmlAt !== -1, 'expected both rewrites');
-    assert.ok(apiAt < htmlAt, 'the /api rewrite must be listed first');
+  test('the api rewrite comes before anything else', () => {
+    const shell = rewrites.find((r) => r.destination === '/index.html');
+    // There is deliberately no catch-all now: every public page is a real file
+    // and the app is served at /app, so nothing needs the SPA fallback. If one
+    // is ever reintroduced it must come after /api and /app, or it will shadow
+    // them. Asserted as "present rules are ordered", which is true either way.
+    if (shell) {
+      const at = rewrites.indexOf(shell);
+      const api = rewrites.findIndex((r) => r.destination === '/api/index' && r.source.startsWith('/api'));
+      assert.ok(api < at, '/api must be declared before any catch-all');
+    }
   });
 
+  test('there is no catch-all that could shadow a page', () => {
+    // The bug this guards: Vercel evaluates rewrites BEFORE the filesystem, so
+    // "/((?!api/).*)" -> /index.html made /about return the landing page with a
+    // 200. Status checks pass, tests that only look for words pass, and the
+    // page is simply the wrong document. With no catch-all, the real files win.
+    const shell = rewrites.find((r) => r.destination === '/index.html');
+    assert.ok(
+      !shell,
+      'no catch-all rewrite: every public page is a real file and the app is at /app'
+    );
+  });
+
+  test('the api rewrite is the only rule besides /app', () => {
+    assert.deepEqual(
+      rewrites.map((r) => r.source).sort(),
+      ['/api/(.*)', '/app'],
+      'keep rewrites minimal — anything else shadows a static page'
+    );
+  });
+
+
   test('the static catch-all still spares api paths', () => {
-    const source = sourceOf('/index.html');
-    assert.ok(source, 'expected a rewrite serving the app shell');
-    assert.ok(!matches(source, '/api/auth/signup'));
-    assert.ok(matches(source, '/tracker'));
-    assert.ok(matches(source, '/js/app.js'));
+    // Client-side routes are hash-based (#timer), so there is no server-side
+    // route for them to serve. /tracker and /js/app.js resolve as files.
+    assert.ok(!sourceOf('/index.html'), 'no catch-all; sections use hash routes');
+    for (const asset of ['/js/app.js', '/css/site.css', '/logo.svg']) {
+      assert.ok(existsSync(join(root, 'public', asset)), `public${asset} must exist`);
+    }
   });
 
   test('static assets are served from public', () => {
     assert.equal(config.outputDirectory, 'public');
   });
 
-  test('the app is not swallowed by the SPA catch-all', () => {
-    // / is now the public landing page, and /app is the login-walled shell. The
-    // catch-all serves index.html, so without an explicit rule /app would get
-    // the landing page and nobody could sign in.
+  test('the app is served from the function, not a file', () => {
+    // /app must reach Express so it can send app.html. If it were a plain file
+    // path it would work too, but then the server would have no route for it
+    // and local development would differ from production.
     const app = rewrites.find((r) => r.source === '/app');
     assert.ok(app, '/app needs its own rewrite to the function');
     assert.equal(app.destination, '/api/index');
-
-    const firstShell = rewrites.findIndex((r) => r.destination === '/index.html');
-    assert.ok(
-      rewrites.indexOf(app) < firstShell,
-      '/app must be declared before the SPA catch-all'
-    );
   });
 
   test('the public pages exist as real files, not rewrites', () => {
@@ -126,6 +147,7 @@ describe('vercel.json', () => {
       );
     }
   });
+
 
   test('the landing page and the app are separate files', () => {
     // The whole point of the split: / must explain the app to a crawler, and

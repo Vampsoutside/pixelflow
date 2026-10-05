@@ -164,6 +164,13 @@ app.get('/app', (_req, res) => res.sendFile(join(PUBLIC_DIR, 'app.html')));
 // shell, so a mistyped URL explains itself instead of asking for a login.
 app.get('/app/*', (_req, res) => res.sendFile(join(PUBLIC_DIR, 'app.html')));
 
+// An unknown path falls back to the landing page rather than a bare 404, so a
+// mistyped URL explains itself instead of erroring. This is a server-side
+// fallback, deliberately NOT a vercel.json rewrite: a rewrite there is evaluated
+// before the filesystem and would shadow /about, /privacy and every other real
+// page, returning the landing page for all of them.
+app.get(/.*/, (_req, res) => res.sendFile(join(PUBLIC_DIR, 'index.html')));
+
 // ── errors ───────────────────────────────────────────────────────────────
 
 app.use((err, _req, res, _next) => {
