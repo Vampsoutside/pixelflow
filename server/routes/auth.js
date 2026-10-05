@@ -329,18 +329,18 @@ router.get('/:provider/login', async (req, res) => {
 /** Step 2 — the provider sends the browser back with a code. */
 router.get('/:provider/callback', async (req, res) => {
   const { provider } = req.params;
-  if (!isProvider(provider)) return res.redirect('/?auth=unknown-provider');
-  if (!providerConfigured(provider)) return res.redirect('/?auth=unconfigured');
+  if (!isProvider(provider)) return res.redirect('/app?auth=unknown-provider');
+  if (!providerConfigured(provider)) return res.redirect('/app?auth=unconfigured');
 
   const { code, state, error } = req.query;
   const label = PROVIDERS[provider].label;
-  if (error) return res.redirect(`/?auth=denied&provider=${provider}`);
+  if (error) return res.redirect(`/app?auth=denied&provider=${provider}`);
 
   // Single-use state, expired after ten minutes.
   const row = await consumeLoginState(String(state || ''), provider);
 
   if (!row || !verifyState(state) || Date.now() - row.created_at > STATE_TTL_MS) {
-    return res.redirect('/?auth=bad-state');
+    return res.redirect('/app?auth=bad-state');
   }
 
   try {
@@ -352,21 +352,21 @@ router.get('/:provider/callback', async (req, res) => {
         'SELECT 1 AS x FROM oauth_identities WHERE user_id = ? AND provider = ? AND subject = ?',
       ).get(row.link_user_id, provider, profile.subject);
 
-      if (owner) return res.redirect('/?auth=already-linked');
+      if (owner) return res.redirect('/app?auth=already-linked');
 
       await db.prepare(
         'INSERT INTO oauth_identities (user_id, provider, subject, email) VALUES (?,?,?,?)',
       ).run(row.link_user_id, provider, profile.subject, profile.email);
       setSessionCookie(res, Number(row.link_user_id));
-      return res.redirect(`/?auth=linked&provider=${provider}`);
+      return res.redirect(`/app?auth=linked&provider=${provider}`);
     }
 
     const { id, created } = await resolveUser(provider, profile);
     setSessionCookie(res, id);
-    return res.redirect(`/?auth=${created ? 'welcome' : 'ok'}&provider=${provider}`);
+    return res.redirect(`/app?auth=${created ? 'welcome' : 'ok'}&provider=${provider}`);
   } catch (err) {
     console.error(`[auth] ${provider} sign-in failed:`, err.message);
-    return res.redirect('/?auth=failed');
+    return res.redirect('/app?auth=failed');
   }
 });
 

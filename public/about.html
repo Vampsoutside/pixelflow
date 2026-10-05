@@ -7,43 +7,26 @@
 <meta name="description" content="PixelFlow is a pixel-art pomodoro timer and study tracker. Log study hours, plan your week, keep tasks and deadlines on a calendar, sync Google Calendar, and stay on track with friends — in your browser.">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="/about">
-<style>
-  :root { --fg:#e8e8ef; --muted:#9a9aae; --bg:#0f0f16; --card:#171722; --line:#2a2a3a;
-          --accent:#7c6fff; --accent2:#6bffda; --link:#8f85ff; }
-  @media (prefers-color-scheme: light) {
-    :root { --fg:#1a1a22; --muted:#5a5a6a; --bg:#fbfbfd; --card:#fff; --line:#e3e3ec; }
-  }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg);
-         font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
-  .wrap { max-width:760px; margin:0 auto; padding:48px 24px 96px; }
-  .mark { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.78rem; letter-spacing:.22em;
-          text-transform:uppercase; color:var(--accent2); margin:0 0 10px; }
-  h1 { font-size:2.1rem; line-height:1.2; margin:0 0 10px; letter-spacing:-.02em; }
-  h2 { font-size:1.2rem; margin:40px 0 8px; letter-spacing:-.01em; }
-  h3 { font-size:1rem; margin:24px 0 4px; }
-  p, li { color:var(--muted); }
-  strong { color:var(--fg); font-weight:600; }
-  a { color:var(--link); }
-  .lede { font-size:1.1rem; color:var(--fg); opacity:.85; margin:0 0 6px; }
-  .meta { font-size:.88rem; color:var(--muted); opacity:.7; margin:0 0 32px; }
-  ul { padding-left:20px; } li { margin:6px 0; }
-  .cta { display:flex; gap:10px; flex-wrap:wrap; margin:26px 0 8px; }
-  .btn { display:inline-block; padding:11px 20px; border-radius:9px; border:1px solid var(--line);
-         background:var(--card); color:var(--fg); text-decoration:none; font-size:.95rem; font-weight:500; }
-  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-  .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); margin:18px 0 4px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:11px; padding:16px 17px; }
-  .card h3 { margin:0 0 5px; }
-  .card p { margin:0; font-size:.93rem; }
-  .box { background:var(--card); border:1px solid var(--line); border-radius:11px;
-         padding:17px 19px; margin:22px 0; }
-  .box p { margin:7px 0; }
-  hr { border:0; border-top:1px solid var(--line); margin:36px 0; }
-  footer { margin-top:44px; font-size:.88rem; color:var(--muted); opacity:.78; }
-</style>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/site.css">
 </head>
 <body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <img src="/logo.svg" width="30" height="30" alt="">
+      <span>PixelFlow</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/#features">Features</a>
+      <a href="/about">About</a>
+      <a href="/products">Products</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy</a>
+      <a class="btn primary" href="/app" style="padding:7px 14px;font-size:.88rem;">Open app</a>
+    </nav>
+  </div>
+</header>
 <main class="wrap">
   <p class="mark">PixelFlow</p>
   <h1>A pixel-art pomodoro timer that actually keeps track of your study time.</h1>
@@ -118,13 +101,26 @@
   add or remove at any time, and disconnecting one leaves the rest of your account alone.</p>
 
   <hr>
-  <footer>
-    <p>PixelFlow is an independent project. It is not affiliated with, endorsed by, or
-    sponsored by Google, Spotify, Vercel or Turso. Google Calendar and Spotify are
-    trademarks of their respective owners.</p>
-    <p><a href="/">Open PixelFlow</a> &middot; <a href="/privacy">Privacy Policy</a>
-    &middot; <a href="/terms">Terms of Use</a></p>
-  </footer>
 </main>
+<footer class="site-footer">
+  <div class="wrap wrap-wide">
+    <div>
+      <a class="brand" href="/" style="margin-bottom:8px;">
+        <img src="/logo.svg" width="24" height="24" alt="">
+        <span>PixelFlow</span>
+      </a>
+      <p>An independent pixel-art study tracker. Not affiliated with, endorsed by, or sponsored
+      by Google, Spotify, Vercel or Turso.</p>
+    </div>
+    <nav>
+      <a href="/app">Open app</a>
+      <a href="/about">About</a>
+      <a href="/products">Products</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/terms">Terms of Use</a>
+    </nav>
+  </div>
+</footer>
 </body>
 </html>

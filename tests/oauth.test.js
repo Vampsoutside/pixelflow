@@ -158,7 +158,7 @@ describe('the authorization redirect', () => {
 describe('the callback', () => {
   test('rejects a state that was never issued', async () => {
     const res = await client()('/api/auth/google/callback?code=x&state=not-a-real-state');
-    assert.equal(location(res), '/?auth=bad-state');
+    assert.equal(location(res), '/app?auth=bad-state');
   });
 
   test('rejects a state issued for a different provider', async () => {
@@ -167,12 +167,12 @@ describe('the callback', () => {
     const state = new URL(location(start)).searchParams.get('state');
     // Replay Google's state to Microsoft: the provider column must not match.
     const res = await call(`/api/auth/microsoft/callback?code=x&state=${state}`);
-    assert.equal(location(res), '/?auth=bad-state');
+    assert.equal(location(res), '/app?auth=bad-state');
   });
 
   test('reports a cancelled consent screen', async () => {
     const res = await client()('/api/auth/google/callback?error=access_denied');
-    assert.equal(location(res), '/?auth=denied&provider=google');
+    assert.equal(location(res), '/app?auth=denied&provider=google');
   });
 
   test('creates an account and signs in on first use', async () => {
@@ -183,7 +183,7 @@ describe('the callback', () => {
     const state = new URL(location(start)).searchParams.get('state');
     const res = await call(`/api/auth/google/callback?code=abc&state=${state}`);
 
-    assert.equal(location(res), '/?auth=welcome&provider=google');
+    assert.equal(location(res), '/app?auth=welcome&provider=google');
     // A session cookie is what makes the redirect actually signed in.
     const session = await call('/api/auth/session');
     const { user } = await session.json();
@@ -210,7 +210,7 @@ describe('the callback', () => {
     const state = new URL(location(start)).searchParams.get('state');
     const res = await call(`/api/auth/google/callback?code=abc&state=${state}`);
 
-    assert.equal(location(res), '/?auth=ok&provider=google');
+    assert.equal(location(res), '/app?auth=ok&provider=google');
     const { user } = await (await call('/api/auth/session')).json();
     assert.equal(user.username, 'grace');
   });
@@ -222,12 +222,12 @@ describe('the callback', () => {
     const state = new URL(location(start)).searchParams.get('state');
 
     const first = await call(`/api/auth/google/callback?code=abc&state=${state}`);
-    assert.equal(location(first), '/?auth=welcome&provider=google');
+    assert.equal(location(first), '/app?auth=welcome&provider=google');
 
     // The same state again must not work, or a captured URL is a permanent
     // sign-in link.
     const second = await call(`/api/auth/google/callback?code=abc&state=${state}`);
-    assert.equal(location(second), '/?auth=bad-state');
+    assert.equal(location(second), '/app?auth=bad-state');
   });
 
   test('links to an existing local account when the email matches', async () => {
@@ -246,7 +246,7 @@ describe('the callback', () => {
     const res = await fresh(`/api/auth/google/callback?code=abc&state=${state}`);
 
     // Not a new account: the existing one is reused.
-    assert.equal(location(res), '/?auth=ok&provider=google');
+    assert.equal(location(res), '/app?auth=ok&provider=google');
     const { user } = await (await fresh('/api/auth/session')).json();
     assert.equal(user.username, 'linus');
 
@@ -268,7 +268,7 @@ describe('the callback', () => {
     const state = new URL(location(start)).searchParams.get('state');
     const res = await call(`/api/auth/google/callback?code=abc&state=${state}`);
 
-    assert.equal(location(res), '/?auth=welcome&provider=google');
+    assert.equal(location(res), '/app?auth=welcome&provider=google');
     const { user } = await (await call('/api/auth/session')).json();
     assert.notEqual(user.username, 'linus');
   });
@@ -280,7 +280,7 @@ describe('the callback', () => {
     const state = new URL(location(start)).searchParams.get('state');
     const res = await call(`/api/auth/microsoft/callback?code=abc&state=${state}`);
 
-    assert.equal(location(res), '/?auth=welcome&provider=microsoft');
+    assert.equal(location(res), '/app?auth=welcome&provider=microsoft');
     const { user } = await (await call('/api/auth/session')).json();
     // Falls back to a placeholder address so the NOT NULL column is satisfied.
     assert.equal(user.email, 'microsoft-ms-sub-anon@linked.local');
@@ -304,7 +304,7 @@ describe('the callback', () => {
     const state = new URL(location(start)).searchParams.get('state');
     const res = await call(`/api/auth/google/callback?code=abc&state=${state}`);
 
-    assert.equal(location(res), '/?auth=welcome&provider=google');
+    assert.equal(location(res), '/app?auth=welcome&provider=google');
     const { user } = await (await call('/api/auth/session')).json();
     // "grace" is taken — by the account above — so the name must be unique.
     assert.notEqual(user.username, 'grace');
@@ -326,7 +326,7 @@ describe('linking and unlinking', () => {
     const start = await call('/api/auth/google/login');
     const state = new URL(location(start)).searchParams.get('state');
     const res = await call(`/api/auth/google/callback?code=abc&state=${state}`);
-    assert.equal(location(res), '/?auth=linked&provider=google');
+    assert.equal(location(res), '/app?auth=linked&provider=google');
 
     assert.equal((await call.user()).username, 'maya');
   });

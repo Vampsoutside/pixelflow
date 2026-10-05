@@ -335,6 +335,77 @@ describe('the legal pages google asks for', () => {
     assert.ok(/PixelFlow/.test(html), 'the title should name the app');
   });
 
+  test('/ is a public landing page, not the login-walled app', async () => {
+    // This is the URL in the OAuth consent screen's Home page field, and it is
+    // the page Google's reviewer fetches. While / served the app shell it was a
+    // sign-in form and nothing else, which is what produced the rejection
+    // twice. The landing page must explain the app on its own.
+    const res = await fetch(`${base}/`);
+    assert.equal(res.status, 200);
+    const html = await res.text();
+
+    assert.ok(!html.includes('id="auth-overlay"'), '/ must not be the app shell');
+    assert.ok(!html.includes('id="shell"'), '/ must not be the app shell');
+    assert.ok(/<nav|<header|<main/i.test(html), 'a landing page has landmarks');
+
+    const lower = html.toLowerCase();
+    for (const term of ['pomodoro', 'timer', 'study', 'calendar', 'pixel-art']) {
+      assert.ok(lower.includes(term), `the landing page should mention ${term}`);
+    }
+  });
+
+  test('/ links to every page a reviewer is asked about', async () => {
+    const html = await (await fetch(`${base}/`)).text();
+    for (const href of ['/about', '/privacy', '/terms', '/app']) {
+      assert.ok(html.includes(`href="${href}"`), `the landing page should link to ${href}`);
+    }
+  });
+
+  test('the app is still reachable', async () => {
+    const res = await fetch(`${base}/app`);
+    assert.equal(res.status, 200);
+    assert.ok((await res.text()).includes('id="shell"'), '/app serves the app');
+  });
+
+  test('the marketing pages are complete', async () => {
+    const pages = {
+      '/about': ['what', 'features'],
+      '/support': ['help', 'contact'],
+      '/products': ['pixelflow'],
+    };
+    for (const [path, terms] of Object.entries(pages)) {
+      const res = await fetch(`${base}${path}`);
+      assert.equal(res.status, 200, `${path} must be public`);
+      const lower = (await res.text()).toLowerCase();
+      for (const term of terms) {
+        assert.ok(lower.includes(term), `${path} should mention ${term}`);
+      }
+    }
+  });
+
+  test('there is a logo, and the pages use it', async () => {
+    const icon = await fetch(`${base}/logo.svg`);
+    assert.equal(icon.status, 200, 'a logo.svg should exist');
+    const svg = await icon.text();
+    assert.ok(svg.includes('<svg'), 'and it really is an SVG');
+
+    for (const path of ['/', '/about', '/privacy', '/terms']) {
+      const html = await (await fetch(`${base}${path}`)).text();
+      assert.ok(html.includes('logo.svg'), `${path} should show the logo`);
+    }
+  });
+
+  test('every page declares a title and a description', async () => {
+    for (const path of ['/', '/about', '/privacy', '/terms', '/support', '/products']) {
+      const html = await (await fetch(`${base}${path}`)).text();
+      assert.ok(new RegExp('<title>[^<]{5,}').test(html), `${path} needs a title`);
+      assert.ok(
+        /<meta\s+name=["']description["']\s+content=["'][^"]{40,}["']/i.test(html),
+        `${path} needs a meta description`
+      );
+    }
+  });
+
   test('the consent screen offers them as links', async () => {
     const res = await fetch(`${base}/api/auth/providers`);
     const body = await res.json();

@@ -176,7 +176,7 @@ router.get('/status', requireAuth, async (req, res) => {
 // ── step 1: send the user to Google's consent screen ──────────────────────
 
 router.get('/login', requireAuth, async (req, res) => {
-  if (!calendarConfigured()) return res.redirect('/?gcal=unconfigured');
+  if (!calendarConfigured()) return res.redirect('/app?gcal=unconfigured');
 
   const state = newState();
   await db
@@ -203,10 +203,10 @@ router.get('/login', requireAuth, async (req, res) => {
 
 router.get('/callback', async (req, res) => {
   const { code, state, error } = req.query;
-  if (error) return res.redirect('/?gcal=denied');
+  if (error) return res.redirect('/app?gcal=denied');
 
   const userId = await verifyState(state);
-  if (!userId || !code) return res.redirect('/?gcal=failed');
+  if (!userId || !code) return res.redirect('/app?gcal=failed');
 
   try {
     const res2 = await fetch(TOKEN_URL, {
@@ -238,10 +238,10 @@ router.get('/callback', async (req, res) => {
       `)
       .run(userId, token.access_token || '', token.refresh_token || '', expiresAt);
 
-    return res.redirect('/?gcal=connected');
+    return res.redirect('/app?gcal=connected');
   } catch (err) {
     console.error('[gcal] exchange failed:', err.message);
-    return res.redirect('/?gcal=failed');
+    return res.redirect('/app?gcal=failed');
   }
 });
 

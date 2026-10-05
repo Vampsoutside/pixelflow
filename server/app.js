@@ -149,8 +149,20 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'No such endpoint' 
 
 app.use(express.static(PUBLIC_DIR, { extensions: ['html'], maxAge: 0 }));
 
-// Everything that is not an API route renders the shell.
-app.get(/.*/, (_req, res) => res.sendFile(join(PUBLIC_DIR, 'index.html')));
+/**
+ * The app itself, at /app.
+ *
+ * `/` is the public landing page — it has to explain the app to a crawler and
+ * to anyone who has not signed in, which is a hard requirement of Google OAuth
+ * verification. The login-walled shell used to sit at `/`, where a reviewer
+ * found nothing but a sign-in form.
+ */
+app.get('/app', (_req, res) => res.sendFile(join(PUBLIC_DIR, 'app.html')));
+
+// A section inside the app, e.g. /app#timer or /app/timer, serves the shell
+// too. Anything else unknown falls through to the landing page rather than the
+// shell, so a mistyped URL explains itself instead of asking for a login.
+app.get('/app/*', (_req, res) => res.sendFile(join(PUBLIC_DIR, 'app.html')));
 
 // ── errors ───────────────────────────────────────────────────────────────
 

@@ -35,11 +35,9 @@ const sourceOf = (destination) => rewrites.find((r) => r.destination === destina
 const MATCHERS = {
   '/api/(.*)': (path) => path === '/api' || path.startsWith('/api/'),
   '/((?!api/).*)': (path) => !path.startsWith('/api/'),
-  // Explicit single-path rewrites to the function, for the pages that must not
-  // be swallowed by the SPA catch-all.
-  '/about': (path) => path === '/about',
-  '/privacy': (path) => path === '/privacy',
-  '/terms': (path) => path === '/terms',
+  // The single explicit rewrite, for the one path that is served by Express
+  // rather than as a static file.
+  '/app': (path) => path === '/app',
 };
 
 function matches(source, path) {
@@ -98,35 +96,47 @@ describe('vercel.json', () => {
     assert.equal(config.outputDirectory, 'public');
   });
 
-  test('the privacy policy is not swallowed by the SPA catch-all', () => {
-    // Google requires a publicly reachable privacy policy at a URL on the
-    // verified domain. The app-shell rewrite matches every non-API path, so
-    // without an explicit rule ahead of it, /privacy returns the SPA HTML with
-    // a 200 — which looks fine to a status check and fails review outright.
-    const shell = sourceOf('/index.html');
-    assert.ok(shell, 'expected the SPA catch-all');
+  test('the app is not swallowed by the SPA catch-all', () => {
+    // / is now the public landing page, and /app is the login-walled shell. The
+    // catch-all serves index.html, so without an explicit rule /app would get
+    // the landing page and nobody could sign in.
+    const app = rewrites.find((r) => r.source === '/app');
+    assert.ok(app, '/app needs its own rewrite to the function');
+    assert.equal(app.destination, '/api/index');
 
-    const legal = ['/about', '/privacy', '/terms'];
-    for (const path of legal) {
-      const explicit = rewrites.find((r) => r.source === path);
-      assert.ok(explicit, `${path} needs its own rewrite to the function`);
-      assert.equal(explicit.destination, '/api/index', `${path} should reach the server`);
-    }
-
-    // And the explicit rules must come first, or the catch-all wins.
     const firstShell = rewrites.findIndex((r) => r.destination === '/index.html');
-    for (const path of legal) {
-      const at = rewrites.findIndex((r) => r.source === path);
-      assert.ok(at < firstShell, `${path} must be declared before the SPA catch-all`);
+    assert.ok(
+      rewrites.indexOf(app) < firstShell,
+      '/app must be declared before the SPA catch-all'
+    );
+  });
+
+  test('the public pages exist as real files, not rewrites', () => {
+    // /about, /privacy and /terms are static files now, so they need no rewrite
+    // and must not be given one: a rewrite would send them to Express, which
+    // does not know those paths.
+    for (const file of ['about.html', 'privacy.html', 'terms.html',
+      'support.html', 'products.html', 'logo.svg']) {
+      assert.ok(existsSync(join(root, 'public', file)), `public/${file} must exist`);
+    }
+    for (const path of ['/about', '/privacy', '/terms']) {
+      assert.ok(
+        !rewrites.some((r) => r.source === path),
+        `${path} is a static file and should not have a rewrite`
+      );
     }
   });
 
-  test('the legal pages exist in the output directory', () => {
-    // A rewrite pointing at a file that is not deployed serves nothing useful,
-    // and the config test alone would still pass.
-    for (const file of ['about.html', 'privacy.html', 'terms.html']) {
-      const p = join(root, 'public', file);
-      assert.ok(existsSync(p), `public/${file} must exist to be served`);
-    }
+  test('the landing page and the app are separate files', () => {
+    // The whole point of the split: / must explain the app to a crawler, and
+    // the login form must not be on it.
+    assert.ok(existsSync(join(root, 'public', 'index.html')), 'landing page at /');
+    assert.ok(existsSync(join(root, 'public', 'app.html')), 'app shell at /app');
+
+    const landing = readFileSync(join(root, 'public', 'index.html'), 'utf8');
+    assert.ok(!landing.includes('id="auth-overlay"'), '/ must not contain the login form');
+
+    const app = readFileSync(join(root, 'public', 'app.html'), 'utf8');
+    assert.ok(app.includes('id="auth-overlay"'), '/app keeps the login form');
   });
 });

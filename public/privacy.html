@@ -7,40 +7,26 @@
 <meta name="description" content="What PixelFlow stores, why, who it is shared with, and how to get it deleted.">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="/privacy">
-<style>
-  :root { --fg:#e8e8ef; --muted:#9a9aae; --bg:#0f0f16; --card:#171722; --line:#2a2a3a;
-          --accent:#7c6fff; --link:#8f85ff; }
-  @media (prefers-color-scheme: light) {
-    :root { --fg:#1a1a22; --muted:#5a5a6a; --bg:#fbfbfd; --card:#fff; --line:#e3e3ec; }
-  }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg);
-         font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
-  .wrap { max-width:720px; margin:0 auto; padding:48px 24px 96px; }
-  h1 { font-size:1.9rem; line-height:1.25; margin:0 0 6px; letter-spacing:-.02em; }
-  h2 { font-size:1.15rem; margin:38px 0 10px; letter-spacing:-.01em; }
-  h3 { font-size:1rem; margin:24px 0 6px; color:var(--fg); }
-  p, li { color:var(--muted); }
-  strong { color:var(--fg); font-weight:600; }
-  a { color:var(--link); }
-  .lede { color:var(--fg); opacity:.75; margin:0 0 4px; }
-  .meta { font-size:.85rem; color:var(--muted); opacity:.7; margin:0 0 34px; }
-  ul { padding-left:20px; }
-  li { margin:5px 0; }
-  table { width:100%; border-collapse:collapse; margin:16px 0; font-size:.93rem; }
-  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { color:var(--fg); font-weight:600; }
-  td { color:var(--muted); }
-  code { background:var(--card); border:1px solid var(--line); border-radius:5px;
-         padding:1px 5px; font-size:.88em; }
-  .box { background:var(--card); border:1px solid var(--line); border-radius:10px;
-         padding:16px 18px; margin:20px 0; }
-  .box p { margin:6px 0; }
-  hr { border:0; border-top:1px solid var(--line); margin:34px 0; }
-  footer { margin-top:44px; font-size:.88rem; color:var(--muted); opacity:.75; }
-</style>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/site.css">
 </head>
 <body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <img src="/logo.svg" width="30" height="30" alt="">
+      <span>PixelFlow</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/#features">Features</a>
+      <a href="/about">About</a>
+      <a href="/products">Products</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy</a>
+      <a class="btn primary" href="/app" style="padding:7px 14px;font-size:.88rem;">Open app</a>
+    </nav>
+  </div>
+</header>
 <main class="wrap">
   <h1>Privacy Policy</h1>
   <p class="lede">What PixelFlow stores, why, who else sees it, and how to make it go away.</p>
@@ -188,12 +174,26 @@
   </div>
 
   <hr>
-  <footer>
-    <p>PixelFlow is an independent study-tracking app and is not affiliated with, endorsed by,
-    or sponsored by Google, Spotify, Vercel or Turso. Google Calendar and Spotify are
-    trademarks of their respective owners.</p>
-    <p><a href="/">Back to PixelFlow</a> &middot; <a href="/terms">Terms of Use</a></p>
-  </footer>
 </main>
+<footer class="site-footer">
+  <div class="wrap wrap-wide">
+    <div>
+      <a class="brand" href="/" style="margin-bottom:8px;">
+        <img src="/logo.svg" width="24" height="24" alt="">
+        <span>PixelFlow</span>
+      </a>
+      <p>An independent pixel-art study tracker. Not affiliated with, endorsed by, or sponsored
+      by Google, Spotify, Vercel or Turso.</p>
+    </div>
+    <nav>
+      <a href="/app">Open app</a>
+      <a href="/about">About</a>
+      <a href="/products">Products</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/terms">Terms of Use</a>
+    </nav>
+  </div>
+</footer>
 </body>
 </html>

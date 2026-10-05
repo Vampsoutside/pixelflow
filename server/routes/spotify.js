@@ -40,7 +40,7 @@ router.get('/config', async (_req, res) => {
 
 router.get('/login', requireAuth, async (req, res) => {
   if (!spotifyConfigured()) {
-    return res.redirect('/?spotify=unconfigured');
+    return res.redirect('/app?spotify=unconfigured');
   }
   const state = newState();
   await db.prepare('INSERT INTO oauth_states (state, user_id, created_at) VALUES (?,?,?)')
@@ -75,14 +75,14 @@ async function exchangeToken(form) {
 router.get('/callback', async (req, res) => {
   const { code, state, error } = req.query;
 
-  if (error) return res.redirect(`/?spotify=denied`);
+  if (error) return res.redirect(`/app?spotify=denied`);
 
   // Single-use state, expired after 10 minutes. It has to be read before it is
   // removed — a DELETE returns no rows, so reading it out of the DELETE would
   // always look like a forgery and reject every callback.
   const row = await consumeLinkState(String(state || ''));
   if (!row || !verifyState(state) || Date.now() - row.created_at > 10 * 60 * 1000) {
-    return res.redirect('/?spotify=bad-state');
+    return res.redirect('/app?spotify=bad-state');
   }
 
   try {
@@ -107,10 +107,10 @@ router.get('/callback', async (req, res) => {
       Date.now() + (token.expires_in || 3600) * 1000,
       token.scope || SCOPES,
     );
-    return res.redirect('/?spotify=connected');
+    return res.redirect('/app?spotify=connected');
   } catch (err) {
     console.error('[spotify] token exchange failed:', err.message);
-    return res.redirect('/?spotify=exchange-failed');
+    return res.redirect('/app?spotify=exchange-failed');
   }
 });
 

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PixelFlow — pixel-art pomodoro timer and study tracker</title>
+<meta name="description" content="PixelFlow is a pixel-art pomodoro timer and study tracker. Plan weekly study hours, time what you actually study, keep tasks and deadlines on a calendar, and sync Google Calendar to follow your schedule across devices.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://stitch-flax.vercel.app/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/layout.css">
+<link rel="stylesheet" href="/css/timer.css">
+<link rel="stylesheet" href="/css/tracker.css">
+<link rel="stylesheet" href="/css/tasks.css">
+<link rel="stylesheet" href="/css/friends.css">
+<link rel="stylesheet" href="/css/media.css">
+<link rel="stylesheet" href="/css/avatar.css">
+<link rel="stylesheet" href="/css/consent.css">
+</head>
+<body>
+
+<div id="bg-canvas"></div>
+<canvas id="bg-particles"></canvas>
+
+<!-- ── AUTH ─────────────────────────────────────────────────────────── -->
+<div id="auth-overlay" hidden>
+  <div class="auth-wrap">
+    <div class="auth-logo-big">PIXEL<br>FLOW</div>
+    <div class="auth-tagline">your pixel-art study companion</div>
+
+    <div class="auth-tabs" role="tablist">
+      <button class="auth-tab" type="button" id="auth-tab-login" role="tab">Sign in</button>
+      <button class="auth-tab" type="button" id="auth-tab-signup" role="tab">Create account</button>
+    </div>
+
+    <form id="auth-form" autocomplete="on">
+      <input class="auth-inp" id="a-user" autocomplete="username" placeholder="Username" required>
+      <input class="auth-inp" id="a-email" type="email" autocomplete="email" placeholder="Email" required>
+      <input class="auth-inp" id="a-pass" type="password" autocomplete="current-password" placeholder="Password (min 8 chars)" required minlength="8">
+      <div class="auth-error" id="auth-error" hidden></div>
+      <button class="auth-btn" type="submit" id="auth-submit">Sign In</button>
+    </form>
+
+    <div class="auth-providers" id="auth-providers" hidden>
+      <div class="auth-or"><span>or</span></div>
+      <div class="auth-provider-list" id="auth-provider-list"></div>
+    </div>
+
+    <p class="auth-legal">
+    <a href="/about">About this app</a> &middot;
+    <a href="/privacy">Privacy Policy</a> &middot;
+    <a href="/terms">Terms of Use</a>
+  </p>
+
+  <button class="auth-btn auth-guest" type="button" id="auth-guest">Continue as guest</button>
+    <p class="auth-guest-note" id="auth-guest-note">
+      Try everything out. Your progress saves automatically — add a password
+      later to keep it.
+    </p>
+
+    <div class="auth-switch" id="auth-switch" hidden>
+      <span id="auth-mode-hint">Already have one?</span>
+      <a id="auth-toggle">Sign in instead</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── APP ──────────────────────────────────────────────────────────── -->
+<div id="shell" hidden>
+
+  <nav id="sidebar">
+    <div class="sb-logo" title="PixelFlow">PF<br>&#10022;</div>
+    <button class="sb-btn active" data-section="timer" title="Timer">
+      <span class="glyph">&#9201;</span><span class="label">Timer</span>
+    </button>
+    <button class="sb-btn" data-section="tasks" title="Tasks">
+      <span class="glyph">&#9989;</span><span class="label">Tasks</span>
+    </button>
+    <button class="sb-btn" data-section="friends" title="Friends">
+      <span class="glyph">&#128101;</span><span class="label">Friends</span>
+      <span class="sb-badge" id="sb-friend-badge" hidden></span>
+    </button>
+    <button class="sb-btn" data-section="media" title="Media">
+      <span class="glyph">&#9835;</span><span class="label">Media</span>
+    </button>
+    <button class="sb-btn" data-section="avatar" title="Avatar">
+      <span class="glyph">&#127918;</span><span class="label">Avatar</span>
+    </button>
+    <button class="sb-btn" data-section="calendar" title="Calendar">
+      <span class="glyph">&#128197;</span><span class="label">Cal</span>
+    </button>
+    <button class="sb-btn" data-section="logs" title="Logs">
+      <span class="glyph">&#128203;</span><span class="label">Logs</span>
+    </button>
+    <button class="sb-btn" data-section="analytics" title="Analytics">
+      <span class="glyph">&#128200;</span><span class="label">Stats</span>
+    </button>
+    <div class="sb-spacer"></div>
+    <button class="sb-btn" data-section="settings" title="Settings">
+      <span class="glyph">&#9881;</span><span class="label">Setup</span>
+    </button>
+    <button class="sb-btn" id="sb-account" title="Your account">
+      <span class="glyph">&#128100;</span><span class="label">You</span>
+    </button>
+  </nav>
+
+  <main id="center">
+    <div id="ava-wrap">
+      <canvas id="ava-canvas" width="78" height="102"></canvas>
+      <div class="ava-name-tag" id="ava-tag">READY</div>
+      <div id="ava-resize" title="Resize">&#10517;</div>
+      <button id="ava-minimize" title="Minimise" aria-label="Minimise avatar" aria-pressed="false">&#8210;</button>
+      <button id="ava-expand" title="Expand" aria-label="Restore avatar" aria-pressed="false" style="display:none">&#43;</button>
+    </div>
+    <div id="section-host"></div>
+  </main>
+
+  <aside id="right-panel">
+    <div class="rp-header">
+      <div class="rp-title" id="rp-title">TASKS</div>
+      <div class="rp-tabs" id="rp-tabs"></div>
+      <button class="rp-collapse" id="rp-collapse" title="Hide this panel"
+              aria-label="Hide this panel" aria-expanded="true" aria-controls="rp-body">&#10094;</button>
+    </div>
+    <div class="rp-body" id="rp-body"></div>
+  </aside>
+
+  <!-- Reappears when the panel is collapsed, since the panel itself is gone. -->
+  <button class="rp-restore" id="rp-restore" hidden
+          title="Show the panel" aria-label="Show the panel" aria-controls="rp-body">&#10095;</button>
+</div>
+
+<!-- ── PERSISTENT BARS ──────────────────────────────────────────────── -->
+<div id="spotify-dock" hidden>
+  <div class="sp-art" id="sp-art"></div>
+  <div class="sp-meta">
+    <div class="sp-track" id="sp-track">Not connected</div>
+    <div class="sp-artist" id="sp-artist">Connect Spotify in the Media tab</div>
+  </div>
+  <div class="sp-transport">
+    <button class="sp-btn" id="sp-prev" title="Previous track">&#9198;</button>
+    <button class="sp-btn sp-play" id="sp-play" title="Play / pause">&#9654;</button>
+    <button class="sp-btn" id="sp-next" title="Next track">&#9197;</button>
+  </div>
+  <div class="sp-progress" id="sp-progress" title="Seek">
+    <div class="sp-bar"><div class="sp-fill" id="sp-fill"></div></div>
+    <div class="sp-times"><span id="sp-pos">0:00</span><span id="sp-dur">0:00</span></div>
+  </div>
+  <button class="sp-btn sp-mini" id="sp-shuffle" title="Shuffle">&#128256;</button>
+  <button class="sp-btn sp-mini" id="sp-repeat" title="Repeat">&#128257;</button>
+  <div class="sp-volume">
+    <span class="sp-vol-glyph">&#128266;</span>
+    <input type="range" id="sp-volume" min="0" max="100" value="60" aria-label="Volume">
+  </div>
+</div>
+
+<div id="stats-bar">
+  <div class="stat-pill">
+    <span class="stat-dot-sm" style="background:var(--accent)"></span>
+    Today <b id="s-today">0m</b>
+  </div>
+  <div class="stat-pill">&#127856; <b id="s-poms">0</b> sessions</div>
+  <div class="stat-pill">&#128293; Streak <b id="s-streak">0 days</b></div>
+  <div class="stat-pill">&#9889; Week <b id="s-week">0m</b></div>
+  <div class="xp-section">
+    <span class="xp-lbl" id="s-level">LVL 1</span>
+    <div class="xp-track"><div class="xp-bar" id="xp-bar" style="width:0%"></div></div>
+    <span class="xp-sub" id="s-xp">0 / 100 XP</span>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>
