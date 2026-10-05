@@ -1,104 +1,96 @@
-# Google OAuth verification — what to do before this app serves the public
+# Google OAuth verification — status and remaining steps
 
 Verified against Google's own documentation:
 [Comply with OAuth 2.0 policies](https://developers.google.com/identity/protocols/oauth2/production-readiness/policy-compliance)
 and [Submit for brand verification](https://developers.google.com/identity/protocols/oauth2/production-readiness/brand-verification).
 
-## Done in this repository
+## Why the first submission was rejected
 
-- **Privacy Policy** at `/privacy` and **Terms of Use** at `/terms`. Both public,
-  no sign-in required, which is what the consent screen links to.
-- **A way to delete the account and all its data** — Settings → Delete account.
-  Required by the API Services User Data Policy; the app had no such route.
-- **Least-privilege scopes.** The Calendar flow requests
-  `.../auth/calendar.events` — view and edit events — instead of `.../auth/calendar`,
-  which grants "see, edit, share, and permanently delete all the calendars you can
-  access". The app only ever touches events on the primary calendar. It does not
-  request `calendar.acls`, `calendar.calendarlist` or `calendar.calendars`.
-- **HTTPS-only callbacks**, built from `PUBLIC_ORIGIN`. Google rejects plain HTTP
-  redirect URIs outright.
-- **Privacy notices that match reality.** The Settings copy previously claimed
-  data never left the machine; it does now say what is stored and who processes it.
+Google's reviewer fetches the home page the way a browser without JavaScript
+does. `index.html` is a single-page app whose entire body is two divs — an auth
+overlay and the app shell — and **both ship with the `hidden` attribute**. So
+the reviewer saw a blank page and reported four symptoms, all from that one
+cause:
 
-## Still yours to do — none of this can be done from code
-
-### 1. Enable the API
-
-OAuth consent screen → **APIs & Services → Library** → enable **Google Calendar API**.
-Sign-in works without it; Calendar sync returns 403 without it.
-
-### 2. Branding page
-
-OAuth consent screen → **Branding**:
-
-| Field | Value |
+| Reviewer said | Actual cause |
 |---|---|
-| App name | `PixelFlow` |
-| Homepage | `https://stitch-flax.vercel.app` |
-| Privacy policy | `https://stitch-flax.vercel.app/privacy` |
-| Terms of service | `https://stitch-flax.vercel.app/terms` |
-| Application logo | 128x128 PNG, on the domain you own |
-| App domain | `stitch-flax.vercel.app` |
+| Home page is behind a login page | The only thing present was a sign-in form |
+| Home page does not explain the app's purpose | No text existed outside JS |
+| App name "stitch" does not match the app | Page title read "PixelFlow" |
+| Home page URL not registered to you | `/#timer` — a hash fragment, not a page |
 
-Logo and app name are checked against what the app actually shows. Use the real
-name and mark you already use in the app.
+The hash fragment is worth explaining: `https://stitch-flax.vercel.app/#timer` is
+the same page as `/`. Google read the fragment as a distinct path. Nothing was
+wrong with the domain — putting a clean URL in the field is the fix.
 
-### 3. Authorized redirect URIs
+## What changed in this repository
 
-OAuth consent screen → **Clients → your Web client**:
+- **`/about`** — a static page describing what the app does, who it is for, and
+  how data is handled. Crawler-visible, no JavaScript needed, no sign-in.
+- **Home page meta** — a real `<meta name="description">` and a canonical URL.
+- **Footer links on the signed-out screen** — About / Privacy / Terms, so a
+  human without an account has a way in.
+- **`/about`, `/privacy`, `/terms`** each have their own Vercel rewrite ahead of
+  the SPA catch-all, without which all three silently returned the app shell.
 
-```
-https://stitch-flax.vercel.app/api/auth/google/callback
-https://stitch-flax.vercel.app/api/googlecalendar/callback
-```
+## Do these before resubmitting
 
-Both. The first is sign-in, the second is Calendar sync. Exact match, no
-trailing slash, no wildcards.
+1. **Rename the Vercel project from `stitch` to `PixelFlow`**
+   Dashboard → project **Settings → General → Project Name**.
+   This is the name the reviewer saw. Renaming changes your deployment URLs, so
+   add a custom domain if you want a stable one.
+2. **Set the Home page URL to `https://stitch-flax.vercel.app`**
+   No `#timer`, no trailing slash.
+3. **Set App name to `PixelFlow`** on the Branding page — it must match what
+   `/about` calls itself.
+4. **Privacy policy and Terms URLs**:
+   - `https://stitch-flax.vercel.app/privacy`
+   - `https://stitch-flax.vercel.app/terms`
 
-### 4. Scope justification
+## Already done
 
-Verification asks you to justify every sensitive scope. Copy this:
+- Privacy Policy and Terms of Use, public and crawler-visible.
+- Account deletion (`DELETE /api/me`, exposed in Settings), required by the
+  API Services User Data Policy.
+- Least-privilege scope: `.../auth/calendar.events`, not `.../auth/calendar`.
+  Does not request `calendar.acls`, `calendar.calendarlist` or
+  `calendar.calendars`.
+- HTTPS-only redirect URIs built from `PUBLIC_ORIGIN`.
+- Both redirect URIs registered — sign-in and Calendar sync.
 
-> `openid`, `email` — identify the signed-in user so they can use their existing
-> Google account without creating another one. Used only for authentication; not
-> used for advertising or analytics.
+## Scope justification
+
+> **openid, email** — identify the signed-in user so they can use an existing
+> Google account without creating another one. Authentication only; never used
+> for advertising or analytics.
 >
-> `https://www.googleapis.com/auth/calendar.events` — the core feature of this
+> **https://www.googleapis.com/auth/calendar.events** — the core feature of this
 > app. A user connects their calendar to see the events they scheduled alongside
 > the study hours they plan, and to reach their schedule on any device. The app
 > reads events for the calendar the user connects and writes events the user
 > creates or edits in PixelFlow. It does not access calendar sharing, the list of
 > calendars, or calendar properties, and it does not access any other account.
 
-### 5. Publish
+## Still outstanding
 
-Set the audience to **Production** to publish. Until you do, the app stays in
-**Testing**: only accounts you list as *test users* can sign in, and Google shows
-an "unverified app" warning. That is fine for personal use and is not fine for
-anyone else.
-
-### 6. Verification
-
-Branding page → **Verify Branding**. Automated where possible (minutes);
-otherwise a manual review, typically 2-3 business days.
-
-Note the separate-project requirement: Google's policy asks that production use
-an OAuth client with no developer-only redirect URIs or pre-release origins. If
-your project still has `http://127.0.0.1:5173/...` registered, remove it, or move
-production to its own project.
+- **Google Calendar API** must be enabled (APIs & Services → Library). Sign-in
+  works without it; sync 403s without it.
+- **Verify Branding** — automated where possible (minutes), otherwise 2–3
+  business days. Google's error text says to wait up to 24 hours after changing
+  ownership or branding before retrying; do that.
+- **Demo video.** Verification usually asks for a screen recording of the
+  feature using each scope. Record one continuous clip: sign in with Google →
+  connect Google Calendar → sync an event in → create an event in PixelFlow →
+  open Google Calendar and show it there. This is the most common reason a
+  submission bounces, and the only step not doable from the console.
+- **Production OAuth client hygiene.** Google's policy asks that production use a
+  client with no developer-only origins. If
+  `http://127.0.0.1:5173/api/auth/google/callback` is registered, remove it, or
+  move production to its own project.
 
 ## What this app does not do
 
-No advertising, no analytics or tracking SDKs, no third-party cookies, no sale or
-sharing of data. Friends see only username, avatar, level, and study totals — see
-the Friends section of `/privacy`. Those facts are worth stating in your
-verification submission: they are the strongest argument that the scopes are
-proportionate.
-
-## If verification is refused
-
-The usual causes are a scope without a specific justification, a privacy policy
-that does not name the data collected, or a demo video that does not show the
-feature using the scope. Only the video is missing here — record the sign-in, the
-Calendar connect, a sync pulling an event in, and an edit made in PixelFlow
-appearing in Google Calendar.
+No advertising. No analytics or tracking SDKs. No third-party cookies. No sale
+or sharing of data. Friends see only username, avatar, level, and study totals.
+Stating this in the verification form is the strongest argument that the scopes
+are proportionate.
